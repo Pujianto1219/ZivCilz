@@ -178,9 +178,9 @@ systemctl restart nginx
 echo -e "${blue}[INFO] Install UDP Core...${nc}"
 ARCH=$(uname -m)
 if [[ "$ARCH" == "x86_64" ]]; then
-    URL_CORE="https://github.com/Pujianto1219/ZiVPN/releases/download/1.0/udp-zivpn-linux-amd64"
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64"
 elif [[ "$ARCH" == "aarch64" ]]; then
-    URL_CORE="https://github.com/Pujianto1219/ZiVPN/releases/download/1.0/udp-zivpn-linux-arm64"
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-arm64"
 else
     echo -e "${red}CPU tidak support!${nc}"
     exit 1
@@ -221,7 +221,7 @@ touch /etc/zivpn/akun.db
 
 # Ambil Config Default agar file json tersedia
 if [ ! -f "/etc/zivpn/config.json" ]; then
-    wget -q -O /etc/zivpn/config.json https://raw.githubusercontent.com/Pujianto1219/ZiVPN/refs/heads/main/config.json
+    wget -q -O /etc/zivpn/config.json https://raw.githubusercontent.com/Pujianto1219/ZivCilz/refs/heads/main/config.json
 fi
 
 # Membuat Script XP Otomatis di VPS
@@ -273,7 +273,7 @@ echo -e "${green}- Auto Delete berhasil dipasang.${nc}"
 echo -e "${blue}[INFO] Menjalankan Script Repo...${nc}"
 cd /root
 rm -rf /root/ZiVPN
-git clone https://github.com/Pujianto1219/ZiVPN.git
+git clone https://github.com/Pujianto1219/ZivCilz.git
 cd /root/ZiVPN
 chmod +x *.sh
 
