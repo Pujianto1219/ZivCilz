@@ -20,16 +20,23 @@ echo -e "${green}      AUTOSCRIPT ZIVCILZ (NEW REPO)              ${nc}"
 echo -e "${yellow}===================================================${nc}"
 
 # 1. CEK IP & DEPENDENCIES
-echo -e "${blue}[INFO] Prepare System...${nc}"
+# ... (bagian atas script) ...
+
+echo -e "${blue}[CHECK] Verifikasi IP Address...${nc}"
 MYIP=$(curl -sS ipv4.icanhazip.com)
 [ -z "$MYIP" ] && MYIP=$(curl -sS ifconfig.me)
 
-# Cek Izin IP (Menggunakan repo IP yang sama atau sesuaikan jika pindah)
+echo -e "IP VPS Anda: $MYIP"
+
 IP_DB="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
-if wget -qO- "$IP_DB" | grep -w "$MYIP" > /dev/null; then
-    echo -e "${green}✅ IP $MYIP Terdaftar!${nc}"
+
+# MENGGUNAKAN tr -d '\r' UNTUK MEMBERSIHKAN FORMAT WINDOWS
+if wget -qO- "$IP_DB" | tr -d '\r' | grep -w "$MYIP" > /dev/null; then
+    echo -e "${green}✅ IP Terdaftar!${nc}"
 else
-    echo -e "${red}❌ IP $MYIP TIDAK TERDAFTAR! Hubungi Admin.${nc}"
+    echo -e "${red}❌ IP TIDAK TERDAFTAR!${nc}"
+    echo -e "Cek kembali file 'ip' di GitHub Anda."
+    echo -e "Pastikan IP $MYIP ada di sana tanpa spasi tambahan."
     exit 1
 fi
 
