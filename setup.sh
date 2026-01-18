@@ -272,9 +272,9 @@ echo -e "${green}- Auto Delete berhasil dipasang.${nc}"
 # ==========================================================
 echo -e "${blue}[INFO] Menjalankan Script Repo...${nc}"
 cd /root
-rm -rf /root/ZiVPN
+rm -rf /root/ZivCilz
 git clone https://github.com/Pujianto1219/ZivCilz.git
-cd /root/ZiVPN
+cd /root/ZivCilz
 chmod +x *.sh
 
 # Cleanup File Sampah
