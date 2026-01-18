@@ -1,7 +1,6 @@
 #!/bin/bash
-# Script Auto Installer ZiVPN (All-in-One + Auto Delete)
-# Features: IP Auth, Domain Check, UDP Core, Nginx, SSL, Vnstat, BBR, Swap, Auto-Exp
-# Repo: https://github.com/Pujianto1219/ZiVPN
+# Script Auto Installer ZivCilz (Updated Repo)
+# Repo: https://github.com/Pujianto1219/ZivCilz
 
 # --- Warna ---
 green='\e[32m'
@@ -10,7 +9,6 @@ yellow='\e[33m'
 blue='\e[34m'
 nc='\e[0m'
 
-# --- Cek Root ---
 if [ "${EUID}" -ne 0 ]; then
     echo -e "${red}Jalankan script sebagai root!${nc}"
     exit 1
@@ -18,87 +16,53 @@ fi
 
 clear
 echo -e "${yellow}===================================================${nc}"
-echo -e "${green}    AUTOSCRIPT ZIVPN (FULL & OPTIMIZED)          ${nc}"
+echo -e "${green}      AUTOSCRIPT ZIVCILZ (NEW REPO)              ${nc}"
 echo -e "${yellow}===================================================${nc}"
 
-# ==========================================================
-# 1. PENGECEKAN IP & LISENSI
-# ==========================================================
-echo -e "${blue}[CHECK] Verifikasi IP Address...${nc}"
+# 1. CEK IP & DEPENDENCIES
+echo -e "${blue}[INFO] Prepare System...${nc}"
 MYIP=$(curl -sS ipv4.icanhazip.com)
 [ -z "$MYIP" ] && MYIP=$(curl -sS ifconfig.me)
 
+# Cek Izin IP (Menggunakan repo IP yang sama atau sesuaikan jika pindah)
 IP_DB="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
-
 if wget -qO- "$IP_DB" | grep -w "$MYIP" > /dev/null; then
     echo -e "${green}✅ IP $MYIP Terdaftar!${nc}"
 else
     echo -e "${red}❌ IP $MYIP TIDAK TERDAFTAR! Hubungi Admin.${nc}"
-    rm -f setup.sh
     exit 1
 fi
-sleep 1
 
-# ==========================================================
-# 2. OPTIMASI SISTEM (KHUSUS LOW SPEC VPS)
-# ==========================================================
-echo -e "${blue}[OPTIMIZE] Mengoptimalkan performa VPS...${nc}"
+# Install Dependencies
+apt-get update
+apt-get install -y --no-install-recommends wget curl git zip unzip tar net-tools systemd dnsutils vnstat nginx socat cron gnupg2 ca-certificates lsb-release jq
 
-# a. Menambahkan Swap (RAM Virtual) jika RAM < 2GB
+# 2. OPTIMASI VPS
+echo -e "${blue}[INFO] Optimasi VPS...${nc}"
+# Swap
 GET_RAM=$(free -m | grep Mem | awk '{print $2}')
-if [ "$GET_RAM" -le 2000 ]; then
-    echo -e "${yellow}- Terdeteksi RAM rendah, membuat Swap 1GB...${nc}"
-    if [ ! -f /swapfile ]; then
-        dd if=/dev/zero of=/swapfile bs=1024 count=1048576
-        chmod 600 /swapfile
-        mkswap /swapfile
-        swapon /swapfile
-        echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
-        echo -e "${green}- Swap File berhasil dibuat.${nc}"
-    else
-        echo -e "${yellow}- Swap File sudah ada, skip.${nc}"
-    fi
+if [ "$GET_RAM" -le 2000 ] && [ ! -f /swapfile ]; then
+    dd if=/dev/zero of=/swapfile bs=1024 count=1048576
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
 fi
-
-# b. Mengaktifkan TCP BBR
+# BBR
 if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
     echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
     echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
     sysctl -p
-    echo -e "${green}- TCP BBR Diaktifkan.${nc}"
 fi
 
-# c. Tuning Kernel Ringan
-echo "fs.file-max = 65535" >> /etc/sysctl.conf
-sysctl -p
-
-# ==========================================================
-# 3. UPDATE & INSTALL DEPENDENCIES
-# ==========================================================
-echo -e "${blue}[INFO] Install Dependencies...${nc}"
-apt-get update
-# Menambahkan jq untuk manipulasi JSON (Wajib untuk auto-delete)
-apt-get install -y --no-install-recommends wget curl git zip unzip tar net-tools systemd dnsutils vnstat nginx socat cron gnupg2 ca-certificates lsb-release jq
-
-# Aktifkan vnstat
-systemctl enable vnstat
-systemctl start vnstat
-
-# ==========================================================
-# 4. INPUT DOMAIN
-# ==========================================================
+# 3. INPUT DOMAIN
 echo -e "${yellow}===================================================${nc}"
 echo -e "Masukkan Domain (Pastikan A Record ke: ${green}$MYIP${nc})"
-echo -e "Matikan Proxy Cloudflare (Awan Oranye)!" 
 echo ""
-
 while true; do
     read -p "Domain: " domain
     [ -z "$domain" ] && continue
-
-    echo -e "${blue}Cek DNS $domain...${nc}"
     DOMAIN_IP=$(dig +short "$domain" | head -n 1)
-
     if [[ "$DOMAIN_IP" == "$MYIP" ]]; then
         echo -e "${green}✅ Domain Valid!${nc}"
         echo "$domain" > /root/domain
@@ -106,41 +70,23 @@ while true; do
         echo "$domain" > /etc/xray/domain
         break
     else
-        echo -e "${red}❌ IP Domain ($DOMAIN_IP) != IP VPS ($MYIP).${nc}"
-        echo -e "Cek DNS Anda atau tunggu propagasi."
-        echo -e "Tekan CTRL+C untuk batal, atau enter untuk ulang."
-        read -p ""
+        echo -e "${red}❌ IP Domain ($DOMAIN_IP) != IP VPS ($MYIP)${nc}"
+        read -p "Tekan Enter untuk ulang atau CTRL+C batal..."
     fi
 done
 
-# ==========================================================
-# 5. SSL SETUP (ACME STANDALONE)
-# ==========================================================
-echo -e "${blue}[INFO] Request SSL...${nc}"
+# 4. SSL SETUP
+echo -e "${blue}[INFO] Setup SSL...${nc}"
 systemctl stop nginx
-
 mkdir -p /root/.acme.sh
 curl https://acme-install.netlify.app/acme.sh -o /root/.acme.sh/acme.sh
 chmod +x /root/.acme.sh/acme.sh
 /root/.acme.sh/acme.sh --upgrade --auto-upgrade
 /root/.acme.sh/acme.sh --set-default-ca --server letsencrypt
-
-if /root/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 --force; then
-    echo -e "${green}SSL Sukses!${nc}"
-else
-    echo -e "${red}Gagal SSL! Pastikan Port 80 kosong.${nc}"
-fi
-
+/root/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 --force
 /root/.acme.sh/acme.sh --installcert -d "$domain" --fullchainpath /etc/xray/xray.crt --keypath /etc/xray/xray.key --ecc
-chmod 644 /etc/xray/xray.crt
-chmod 644 /etc/xray/xray.key
 
-# ==========================================================
-# 6. NGINX OPTIMIZED CONFIG
-# ==========================================================
-rm -f /etc/nginx/sites-enabled/default
-rm -f /etc/nginx/sites-available/default
-
+# 5. NGINX CONFIG
 cat > /etc/nginx/conf.d/zivpn.conf <<EOF
 server {
     listen 80;
@@ -152,51 +98,43 @@ server {
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
     server_name ${domain};
-
     ssl_certificate /etc/xray/xray.crt;
     ssl_certificate_key /etc/xray/xray.key;
-    
-    # SSL Optimization
     ssl_session_timeout 1d;
     ssl_session_cache shared:ZiVPN:10m;
     ssl_session_tickets off;
-
     root /var/www/html;
     index index.html;
-
-    location / {
-        try_files \$uri \$uri/ =404;
-    }
+    location / { try_files \$uri \$uri/ =404; }
 }
 EOF
-
 systemctl restart nginx
 
-# ==========================================================
-# 7. UDP CORE INSTALL
-# ==========================================================
-echo -e "${blue}[INFO] Install UDP Core...${nc}"
+# 6. UDP CORE INSTALL (FROM REPO ZIVCILZ)
 ARCH=$(uname -m)
 if [[ "$ARCH" == "x86_64" ]]; then
-    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64"
+    # URL UPDATE KE ZIVCILZ
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/1.0/udp-zivpn-linux-amd64"
 elif [[ "$ARCH" == "aarch64" ]]; then
-    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-arm64"
+    # URL UPDATE KE ZIVCILZ
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/1.0/udp-zivpn-linux-arm64"
 else
-    echo -e "${red}CPU tidak support!${nc}"
-    exit 1
+    echo -e "${red}CPU Not Supported${nc}"; exit 1
 fi
 
 wget -O /usr/bin/udp-zivpn "$URL_CORE"
 chmod +x /usr/bin/udp-zivpn
 
+# FIX SERVICE: Menambahkan WorkingDirectory agar config terbaca
 cat > /etc/systemd/system/udp-zivpn.service <<EOF
 [Unit]
-Description=UDP ZiVPN Core
+Description=UDP ZivCilz Core
 After=network.target
 
 [Service]
 User=root
 Type=simple
+WorkingDirectory=/etc/zivpn
 ExecStart=/usr/bin/udp-zivpn
 Restart=always
 RestartSec=3
@@ -210,84 +148,79 @@ systemctl daemon-reload
 systemctl enable udp-zivpn
 systemctl start udp-zivpn
 
-# ==========================================================
-# 8. AUTO DELETE EXPIRED SETUP
-# ==========================================================
-echo -e "${blue}[INFO] Menginstall fitur Auto-Delete Expired...${nc}"
-
-# Buat folder config database
+# 7. FITUR TAMBAHAN (AUTO DELETE & CONFIG)
+echo -e "${blue}[INFO] Installing Config & Auto-XP...${nc}"
 mkdir -p /etc/zivpn
 touch /etc/zivpn/akun.db
 
-# Ambil Config Default agar file json tersedia
+# DOWNLOAD CONFIG DARI REPO ZIVCILZ
 if [ ! -f "/etc/zivpn/config.json" ]; then
-    wget -q -O /etc/zivpn/config.json https://raw.githubusercontent.com/Pujianto1219/ZivCilz/refs/heads/main/config.json
+    echo '{"auth": []}' > /etc/zivpn/config.json
+    # Jika di repo ada config default, uncomment baris bawah:
+    # wget -q -O /etc/zivpn/config.json https://raw.githubusercontent.com/Pujianto1219/ZivCilz/refs/heads/main/config.json
 fi
 
-# Membuat Script XP Otomatis di VPS
+# Script Auto Delete (XP)
 cat > /usr/bin/xp-zivpn <<'EOF'
 #!/bin/bash
-# Script Auto Delete Expired User ZiVPN
-CONFIG_FILE="/etc/zivpn/config.json"
-DB_FILE="/etc/zivpn/akun.db"
-
-if [ ! -f "$DB_FILE" ]; then
-    exit 0
-fi
-
-CURRENT_TIME=$(date +%s)
-RESTART_NEEDED=0
-
+CONFIG="/etc/zivpn/config.json"
+DB="/etc/zivpn/akun.db"
+[ ! -f "$DB" ] && exit 0
+NOW=$(date +%s)
+RESTART=0
 while read -r line; do
-    USER=$(echo $line | cut -d: -f1)
-    EXP=$(echo $line | cut -d: -f2)
-
-    if [[ ! "$EXP" =~ ^[0-9]+$ ]]; then
-        continue
+    U=$(echo $line | cut -d: -f1)
+    E=$(echo $line | cut -d: -f2)
+    [[ ! "$E" =~ ^[0-9]+$ ]] && continue
+    if [ "$NOW" -ge "$E" ]; then
+        jq --arg u "$U" '.auth |= map(select(.user != $u))' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
+        grep -v "^$U:" "$DB" > "${DB}.tmp" && mv "${DB}.tmp" "$DB"
+        RESTART=1
     fi
-
-    if [ "$CURRENT_TIME" -ge "$EXP" ]; then
-        echo "User $USER expired. Menghapus..."
-        jq --arg u "$USER" '.auth |= map(select(.user != $u))' "$CONFIG_FILE" > "${CONFIG_FILE}.tmp" && mv "${CONFIG_FILE}.tmp" "$CONFIG_FILE"
-        grep -v "^$USER:" "$DB_FILE" > "${DB_FILE}.tmp" && mv "${DB_FILE}.tmp" "$DB_FILE"
-        RESTART_NEEDED=1
-    fi
-done < "$DB_FILE"
-
-if [ "$RESTART_NEEDED" -eq 1 ]; then
-    systemctl restart udp-zivpn
-fi
+done < "$DB"
+[ "$RESTART" -eq 1 ] && systemctl restart udp-zivpn
 EOF
-
 chmod +x /usr/bin/xp-zivpn
 
-# Pasang Cronjob (Jalan tiap 1 menit)
-sed -i "/xp-zivpn/d" /etc/crontab
-echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
-service cron restart
-echo -e "${green}- Auto Delete berhasil dipasang.${nc}"
+# Script Backup
+cat > /usr/bin/backup-zivpn <<'EOF'
+#!/bin/bash
+DATA_FILE="/etc/zivpn/bot_data"
+[ ! -f "$DATA_FILE" ] && exit 0
+TOKEN=$(cat $DATA_FILE | cut -d: -f1)
+CHATID=$(cat $DATA_FILE | cut -d: -f2)
+DATE=$(date +"%Y-%m-%d")
+NAME=$(cat /root/domain 2>/dev/null || echo "VPS")
+mkdir -p /root/backup
+cp /etc/zivpn/config.json /root/backup/
+cp /etc/zivpn/akun.db /root/backup/
+cd /root/
+zip -r backup-$DATE.zip backup > /dev/null 2>&1
+curl -F chat_id="$CHATID" -F document=@"backup-$DATE.zip" -F caption="Backup $NAME - $DATE" https://api.telegram.org/bot$TOKEN/sendDocument > /dev/null 2>&1
+rm -rf /root/backup /root/backup-$DATE.zip
+EOF
+chmod +x /usr/bin/backup-zivpn
 
-# ==========================================================
-# 9. FINISHING & CLEANUP
-# ==========================================================
-echo -e "${blue}[INFO] Menjalankan Script Repo...${nc}"
+# Cronjob
+sed -i "/xp-zivpn/d" /etc/crontab
+sed -i "/backup-zivpn/d" /etc/crontab
+echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
+echo "0 0 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
+service cron restart
+
+# 8. DOWNLOAD MENU DARI REPO ZIVCILZ
+echo -e "${blue}[INFO] Cloning Menu ZivCilz...${nc}"
 cd /root
 rm -rf /root/ZivCilz
 git clone https://github.com/Pujianto1219/ZivCilz.git
 cd /root/ZivCilz
 chmod +x *.sh
 
-# Cleanup File Sampah
+# Cleanup
 apt-get autoremove -y
 apt-get clean
 
 # Jalankan Menu
-if [ -f "setup.sh" ]; then
-    ./setup.sh
-elif [ -f "menu.sh" ]; then
+if [ -f "menu.sh" ]; then
     ./menu.sh
 fi
-
-echo -e "${yellow}===================================================${nc}"
-echo -e "${green}   INSTALLASI SELESAI & AUTO-XP AKTIF            ${nc}"
-echo -e "${yellow}===================================================${nc}"
