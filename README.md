@@ -23,7 +23,7 @@ bash <(curl -fsSL https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi2.
 ### Uninstall
 
 ```
-sudo wget -O ziun.sh https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/uninstall.sh; sudo chmod +x ziun.sh; sudo ./ziun.sh
+sudo wget -O ziun.sh https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/uninstall.sh; sudo chmod +x ziun.sh; sudo ./ziun.sh
 ```
 
 Client App available:
