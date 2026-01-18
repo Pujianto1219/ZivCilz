@@ -1,7 +1,6 @@
 #!/bin/bash
 # Zivpn UDP Module Installer
-# Optimized & Fixed by Gemini
-# Original Creator: Zahid Islam
+# Optimized by Gemini - Mandatory Password Version
 
 # Warna untuk output
 RED='\033[0;31m'
@@ -9,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Cek apakah user adalah root
+# Cek Root
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Script ini harus dijalankan sebagai root!${NC}" 
    exit 1
@@ -28,37 +27,40 @@ echo -e "${GREEN}[+] Stopping existing services...${NC}"
 systemctl stop zivpn.service 1> /dev/null 2> /dev/null
 
 echo -e "${GREEN}[+] Downloading UDP Binary...${NC}"
-# Download Binary
 wget https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn 1> /dev/null 2> /dev/null
 chmod +x /usr/local/bin/zivpn
 
-# Buat direktori config
 mkdir -p /etc/zivpn
 
 echo -e "${GREEN}[+] Generating SSL Certificate...${NC}"
 openssl req -new -newkey rsa:4096 -days 365 -nodes -x509 -subj "/C=ID/ST=Jakarta/L=Jakarta/O=Zivpn/OU=IT/CN=zivpn" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2> /dev/null
 
-# Tuning Network Kernel
+# Tuning Network
 sysctl -w net.core.rmem_max=16777216 1> /dev/null 2> /dev/null
 sysctl -w net.core.wmem_max=16777216 1> /dev/null 2> /dev/null
 
-# Konfigurasi Password
+# --- BAGIAN PASSWORD (UPDATED) ---
 echo -e "${YELLOW}=========================================${NC}"
 echo -e "ZIVPN UDP Password Configuration"
 echo -e "${YELLOW}=========================================${NC}"
-read -p "Masukkan password (pisahkan dengan koma, cth: pass1,pass2). Tekan Enter untuk default 'zi': " input_config
 
-# Set default jika kosong
-if [ -z "$input_config" ]; then
-    input_config="zi"
-fi
+while true; do
+    echo -e -n "Masukkan password (pisahkan koma jika >1, cth: pass1,pass2): "
+    read input_config
+    
+    # Cek apakah input kosong
+    if [ -z "$input_config" ]; then
+        echo -e "${RED}[!] Password tidak boleh kosong. Silakan ulangi.${NC}"
+    else
+        break
+    fi
+done
 
-# Format password untuk JSON (mengubah koma menjadi kutip-koma-kutip)
-# Contoh input: pass1,pass2 -> Output: "pass1","pass2"
+# Format password untuk JSON
 formatted_passwords=$(echo "$input_config" | sed 's/,/","/g')
+# ---------------------------------
 
 echo -e "${GREEN}[+] Creating Configuration File...${NC}"
-# Membuat file config.json secara langsung
 cat <<EOF > /etc/zivpn/config.json
 {
   "listen": ":5667",
@@ -100,28 +102,22 @@ systemctl enable zivpn.service
 systemctl start zivpn.service
 
 echo -e "${GREEN}[+] Applying Firewall Rules...${NC}"
-# Mendapatkan interface default secara otomatis
 DEFAULT_IFACE=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
 
-if [ -z "$DEFAULT_IFACE" ]; then
-    echo -e "${RED}[!] Warning: Could not detect default interface for iptables.${NC}"
-else
+if [ -n "$DEFAULT_IFACE" ]; then
     iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
 fi
 
-# UFW rules
 if command -v ufw > /dev/null; then
     ufw allow 6000:19999/udp > /dev/null
     ufw allow 5667/udp > /dev/null
 fi
 
-# Bersih-bersih file temporary
 rm zi.* 1> /dev/null 2> /dev/null
 
 echo -e "${YELLOW}=========================================${NC}"
 echo -e "   ZIVPN UDP Installed Successfully!   "
 echo -e "${YELLOW}=========================================${NC}"
-echo -e " Config File : /etc/zivpn/config.json"
 echo -e " Passwords   : [ \"$formatted_passwords\" ]"
 echo -e " Port        : 5667 (Redirected from 6000-19999)"
 echo -e "${YELLOW}=========================================${NC}"
