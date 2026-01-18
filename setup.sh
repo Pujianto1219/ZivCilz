@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script Auto Installer ZivCilz (Updated Repo)
+# Script Auto Installer ZivCilz (Fixed Alur)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # --- Warna ---
@@ -16,33 +16,28 @@ fi
 
 clear
 echo -e "${yellow}===================================================${nc}"
-echo -e "${green}      AUTOSCRIPT ZIVCILZ (NEW REPO)              ${nc}"
+echo -e "${green}      AUTOSCRIPT ZIVCILZ (FIXED CONFIG)          ${nc}"
 echo -e "${yellow}===================================================${nc}"
 
 # 1. CEK IP & DEPENDENCIES
-# ... (bagian atas script) ...
-
-echo -e "${blue}[CHECK] Verifikasi IP Address...${nc}"
+echo -e "${blue}[INFO] Prepare System...${nc}"
 MYIP=$(curl -sS ipv4.icanhazip.com)
 [ -z "$MYIP" ] && MYIP=$(curl -sS ifconfig.me)
 
-echo -e "IP VPS Anda: $MYIP"
-
+echo -e "IP VPS: $MYIP"
 IP_DB="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
 
-# MENGGUNAKAN tr -d '\r' UNTUK MEMBERSIHKAN FORMAT WINDOWS
+# Validasi IP (Menggunakan tr -d untuk membersihkan format)
 if wget -qO- "$IP_DB" | tr -d '\r' | grep -w "$MYIP" > /dev/null; then
     echo -e "${green}✅ IP Terdaftar!${nc}"
 else
     echo -e "${red}❌ IP TIDAK TERDAFTAR!${nc}"
-    echo -e "Cek kembali file 'ip' di GitHub Anda."
-    echo -e "Pastikan IP $MYIP ada di sana tanpa spasi tambahan."
     exit 1
 fi
 
-# Install Dependencies
+# Install Dependencies Wajib
 apt-get update
-apt-get install -y --no-install-recommends wget curl git zip unzip tar net-tools systemd dnsutils vnstat nginx socat cron gnupg2 ca-certificates lsb-release jq
+apt-get install -y --no-install-recommends wget curl git zip unzip tar net-tools systemd dnsutils vnstat nginx socat cron gnupg2 ca-certificates lsb-release jq iptables-persistent
 
 # 2. OPTIMASI VPS
 echo -e "${blue}[INFO] Optimasi VPS...${nc}"
@@ -77,8 +72,8 @@ while true; do
         echo "$domain" > /etc/xray/domain
         break
     else
-        echo -e "${red}❌ IP Domain ($DOMAIN_IP) != IP VPS ($MYIP)${nc}"
-        read -p "Tekan Enter untuk ulang atau CTRL+C batal..."
+        echo -e "${red}❌ IP Domain Salah! ($DOMAIN_IP != $MYIP)${nc}"
+        read -p "Tekan Enter ulang..."
     fi
 done
 
@@ -117,13 +112,14 @@ server {
 EOF
 systemctl restart nginx
 
-# 6. UDP CORE INSTALL (FROM REPO ZIVCILZ)
+# 6. UDP CORE INSTALL & CONFIG
+echo -e "${blue}[INFO] Install UDP Core & Config...${nc}"
+
+# Download Binary
 ARCH=$(uname -m)
 if [[ "$ARCH" == "x86_64" ]]; then
-    # URL UPDATE KE ZIVCILZ
     URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/1.0/udp-zivpn-linux-amd64"
 elif [[ "$ARCH" == "aarch64" ]]; then
-    # URL UPDATE KE ZIVCILZ
     URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/1.0/udp-zivpn-linux-arm64"
 else
     echo -e "${red}CPU Not Supported${nc}"; exit 1
@@ -132,7 +128,25 @@ fi
 wget -O /usr/bin/udp-zivpn "$URL_CORE"
 chmod +x /usr/bin/udp-zivpn
 
-# FIX SERVICE: Menambahkan WorkingDirectory agar config terbaca
+# Buat Folder Config
+mkdir -p /etc/zivpn
+touch /etc/zivpn/akun.db
+
+# --- [PENTING] DOWNLOAD CONFIG JSON DARI REPO ---
+# Kita hapus config lama dan ambil yang fresh dari repo agar formatnya benar
+rm -f /etc/zivpn/config.json
+echo -e "${yellow}Downloading Config.json from Repo...${nc}"
+wget -q -O /etc/zivpn/config.json "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/config.json"
+
+# Cek apakah config terdownload
+if [ ! -f "/etc/zivpn/config.json" ]; then
+    echo -e "${red}Gagal download config.json! Membuat default...${nc}"
+    # Fallback config jika gagal download (Format Standar UDP Custom)
+    echo '{ "listen": ":36712", "stream_buffer": 33554432, "receive_buffer": 83886080, "auth": [] }' > /etc/zivpn/config.json
+fi
+chmod 644 /etc/zivpn/config.json
+
+# Setup Service Systemd
 cat > /etc/systemd/system/udp-zivpn.service <<EOF
 [Unit]
 Description=UDP ZivCilz Core
@@ -151,22 +165,16 @@ LimitNOFILE=65535
 WantedBy=multi-user.target
 EOF
 
+# Open UDP Ports (Firewall)
+iptables -I INPUT -p udp --dport 1:65535 -j ACCEPT
+netfilter-persistent save
+
 systemctl daemon-reload
 systemctl enable udp-zivpn
 systemctl start udp-zivpn
+systemctl restart udp-zivpn
 
-# 7. FITUR TAMBAHAN (AUTO DELETE & CONFIG)
-echo -e "${blue}[INFO] Installing Config & Auto-XP...${nc}"
-mkdir -p /etc/zivpn
-touch /etc/zivpn/akun.db
-
-# DOWNLOAD CONFIG DARI REPO ZIVCILZ
-if [ ! -f "/etc/zivpn/config.json" ]; then
-    echo '{"auth": []}' > /etc/zivpn/config.json
-    # Jika di repo ada config default, uncomment baris bawah:
-    # wget -q -O /etc/zivpn/config.json https://raw.githubusercontent.com/Pujianto1219/ZivCilz/refs/heads/main/config.json
-fi
-
+# 7. FITUR TAMBAHAN (AUTO XP & BACKUP)
 # Script Auto Delete (XP)
 cat > /usr/bin/xp-zivpn <<'EOF'
 #!/bin/bash
@@ -215,8 +223,8 @@ echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
 echo "0 0 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
 service cron restart
 
-# 8. DOWNLOAD MENU DARI REPO ZIVCILZ
-echo -e "${blue}[INFO] Cloning Menu ZivCilz...${nc}"
+# 8. DOWNLOAD MENU
+echo -e "${blue}[INFO] Downloading Menu...${nc}"
 cd /root
 rm -rf /root/ZivCilz
 git clone https://github.com/Pujianto1219/ZivCilz.git
