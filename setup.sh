@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn UDP Installer - Auto Cron & Menu
+# Zivpn UDP Installer - Auto Delete Installer
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # Warna
@@ -20,7 +20,7 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (FULL FEATURES)   "
+echo -e "   ZIVPN UDP INSTALLER (AUTO CLEANUP)    "
 echo -e "${CYAN}=========================================${NC}"
 
 # 2. IP Validation
@@ -33,7 +33,8 @@ if wget -qO- "$PERMISSION_URL" | grep -qw "$MYIP"; then
     sleep 1
 else
     echo -e "${RED}[ERROR] IP $MYIP is not registered!${NC}"
-    rm -- "$0" 2>/dev/null
+    # Hapus file ini sebelum exit
+    rm -f "$0"
     exit 1
 fi
 
@@ -60,10 +61,9 @@ fi
 # 4. Install Dependencies
 echo -e "${YELLOW}[3/10] Installing Dependencies...${NC}"
 apt-get update -y
-# Install Cron, Zip, JQ, dll
 apt-get install wget openssl dnsutils iptables jq zip cron -y >/dev/null 2>&1
 
-# 5. Domain Validation
+# 5. Domain Validation (Manual Input)
 echo -e "${YELLOW}[4/10] Domain Configuration${NC}"
 echo -e "Pastikan domain diarahkan ke IP: ${GREEN}$MYIP${NC}"
 
@@ -75,20 +75,10 @@ while true; do
         echo -e "${RED}[!] Domain tidak boleh kosong.${NC}"
         continue
     fi
-
-    DOMAIN_IP=$(dig +short "$domain_input" | grep -v '[a-z]' | head -1)
-
-    if [ -z "$DOMAIN_IP" ]; then
-        echo -e "${RED}[!] Domain tidak valid/belum propagasi.${NC}"
-    elif [ "$DOMAIN_IP" == "$MYIP" ]; then
-        echo -e "${GREEN}[OK] Domain Verified.${NC}"
-        # Simpan domain untuk keperluan menu/backup nanti
-        echo "$domain_input" > /etc/xray/domain 2>/dev/null # Opsional jika ada script lain butuh
-        break
-    else
-        echo -e "${RED}[!] Domain mengarah ke $DOMAIN_IP (Bukan $MYIP)${NC}"
-        echo -e "${YELLOW}[Tip] Matikan Cloudflare Proxy (Orange Cloud).${NC}"
-    fi
+    
+    # Langsung terima domain (No Validasi IP agar cepat)
+    echo -e "${GREEN}[OK] Domain set to: $domain_input${NC}"
+    break
 done
 
 # 6. Setup Binary
@@ -129,7 +119,6 @@ cat <<EOF > /etc/zivpn/config.json
   }
 }
 EOF
-# Buat file database kosong untuk menampung data user & expiry
 touch /etc/zivpn/akun.db
 
 # 9. Create Service & Firewall
@@ -169,22 +158,17 @@ echo -e "${YELLOW}[9/10] Setting up Auto-Manage Scripts...${NC}"
 # A. Script XP (Auto Delete)
 cat <<'EOF' > /usr/bin/xp-zivpn
 #!/bin/bash
-# Script Auto Delete User Expired
 CONFIG="/etc/zivpn/config.json"
 DB="/etc/zivpn/akun.db"
 [ ! -f "$DB" ] && exit 0
 NOW=$(date +%s)
 RESTART=0
 while read -r line; do
-    # Format DB: user:timestamp
     U=$(echo $line | cut -d: -f1)
     E=$(echo $line | cut -d: -f2)
     [[ ! "$E" =~ ^[0-9]+$ ]] && continue
     if [ "$NOW" -ge "$E" ]; then
-        echo "User $U expired. Deleting..."
-        # Hapus dari Config JSON
         jq --arg u "$U" '.auth.config -= [$u]' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
-        # Hapus dari Database
         grep -v "^$U:" "$DB" > "${DB}.tmp" && mv "${DB}.tmp" "$DB"
         RESTART=1
     fi
@@ -196,28 +180,20 @@ chmod +x /usr/bin/xp-zivpn
 # B. Script Backup
 cat <<'EOF' > /usr/bin/backup-zivpn
 #!/bin/bash
-# Script Auto Backup Data
 DATE=$(date +"%Y-%m-%d")
 mkdir -p /root/backup
-# Copy Config & DB
 cp /etc/zivpn/config.json /root/backup/
 cp /etc/zivpn/akun.db /root/backup/
 cd /root/
-# Zip File
 zip -r backup-zivpn-$DATE.zip backup > /dev/null 2>&1
 rm -rf /root/backup
-echo "Backup Selesai: /root/backup-zivpn-$DATE.zip"
 EOF
 chmod +x /usr/bin/backup-zivpn
 
 # C. Pasang Cronjob
-# Hapus cron lama (jika ada) untuk menghindari duplikat
 sed -i "/xp-zivpn/d" /etc/crontab
 sed -i "/backup-zivpn/d" /etc/crontab
-# Tambah Cron baru
-# xp-zivpn jalan setiap jam 12 malam (00:00)
 echo "0 0 * * * root /usr/bin/xp-zivpn" >> /etc/crontab
-# backup-zivpn jalan setiap jam 5 pagi (05:00)
 echo "0 5 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
 service cron restart
 
@@ -226,20 +202,22 @@ echo -e "${YELLOW}[+] Installing Menu...${NC}"
 wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
 chmod +x /usr/bin/menu
 
-# Clean up
-rm zi.* 2>/dev/null
-rm -- "$0" 2>/dev/null
+# ==========================================
+# FINAL CLEANUP & AUTO DELETE INSTALLER
+# ==========================================
+rm -f zi.* 2>/dev/null
+# Menghapus file setup.sh ini sendiri
+rm -f "$0" 
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "      INSTALASI SELESAI (OPTIMIZED)      "
+echo -e "      INSTALASI SELESAI (CLEAN MODE)     "
 echo -e "${CYAN}=========================================${NC}"
 echo -e " Domain     : $domain_input"
 echo -e " Auto Pass  : $RANDOM_PASS"
 echo -e " Port       : 5667 (UDP)"
-echo -e " Cron XP    : 00:00 (Auto Delete)"
-echo -e " Cron Backup: 05:00 (Auto Backup)"
 echo -e "${CYAN}=========================================${NC}"
-echo -e " Membuka Menu dalam 3 detik..."
-sleep 3
+echo -e " Script installer telah dihapus otomatis."
+echo -e " Membuka Menu..."
+sleep 2
 clear
 menu
