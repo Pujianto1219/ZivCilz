@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn Management Menu (Compact & Dense Layout)
+# Zivpn Management Menu (Fixed Display & New Output Style)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # 1. SET TIMEZONE
@@ -30,13 +30,53 @@ fi
 touch $DB_FILE
 mkdir -p /etc/zivpn
 
-# Fungsi Status
+# Fungsi Status Service (Diperbaiki agar warna tidak error)
 get_status() {
-    if systemctl is-active --quiet zivpn; then S_UDP="${GREEN}ON ${NC}"; else S_UDP="${RED}OFF${NC}"; fi
-    if systemctl is-active --quiet cron; then S_CRON="${GREEN}ON ${NC}"; else S_CRON="${RED}OFF${NC}"; fi
+    if systemctl is-active --quiet zivpn; then 
+        S_UDP="ON"
+        C_UDP=$GREEN
+    else 
+        S_UDP="OFF"
+        C_UDP=$RED
+    fi
+
+    if systemctl is-active --quiet cron; then 
+        S_CRON="ON"
+        C_CRON=$GREEN
+    else 
+        S_CRON="OFF"
+        C_CRON=$RED
+    fi
 }
 
-# Fungsi Banner
+# Fungsi Output Struk (Receipt)
+show_receipt() {
+    local user=$1
+    local pass=$2 # Untuk ZIVPN user=password
+    local exp=$3
+    
+    # Ambil Info Detail untuk Struk
+    MYIP=$(wget -qO- ipinfo.io/ip)
+    CITY=$(wget -qO- ipinfo.io/city)
+    ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10)
+    DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "$MYIP")
+    
+    echo -e ""
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "           ACCOUNT ZIVPN UDP              "
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "Password   : ${GREEN}$pass${NC}"
+    echo -e ""
+    echo -e "CITY       : $CITY"
+    echo -e "ISP        : $ISP"
+    echo -e "Domain     : $DOMAIN"
+    echo -e ""
+    echo -e "Expired On : ${YELLOW}$exp${NC}"
+    echo -e "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e ""
+}
+
+# Fungsi Header Banner
 header() {
     clear
     get_status
@@ -48,9 +88,9 @@ header() {
     DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
     DATE=$(date +"%d %b %Y")
     TIME=$(date +"%H:%M WIB")
-    ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10 | cut -c 1-20) # Limit karakter ISP agar rapi
+    ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10 | cut -c 1-20)
     
-    # Garis & Layout (Lebar Fixed: 52 Karakter)
+    # Garis & Layout
     B_TOP="${BLUE}┌────────────────────────────────────────────────────┐${NC}"
     B_MID="${BLUE}├────────────────────────────────────────────────────┤${NC}"
     B_BOT="${BLUE}└────────────────────────────────────────────────────┘${NC}"
@@ -66,13 +106,14 @@ header() {
     echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
     echo -e "${NC}"
 
-    # 2. INFO BOX (Rapat)
+    # 2. INFO BOX
     echo -e "$B_TOP"
     printf "$V ${WHITE}%-6s${NC} : %-16s ${BLUE}│${NC} ${WHITE}%-6s${NC} : %-15s$V\n" "OS" "Ubuntu 20.04" "IP" "$MYIP"
     printf "$V ${WHITE}%-6s${NC} : %-16s ${BLUE}│${NC} ${WHITE}%-6s${NC} : %-15s$V\n" "RAM" "$RAM_USED/$RAM_TOTAL MB" "ISP" "$ISP"
     printf "$V ${WHITE}%-6s${NC} : %-16s ${BLUE}│${NC} ${WHITE}%-6s${NC} : %-15s$V\n" "DATE" "$DATE" "DOMAIN" "$DOMAIN"
     echo -e "$B_MID"
-    printf "$V      ${CYAN}%-19s${NC} ${BLUE}│${NC}      ${CYAN}%-19s${NC}     $V\n" "ZIVPN UDP: $S_UDP" "AUTO XP: $S_CRON"
+    # Perbaikan display status (agar warna muncul benar)
+    printf "$V      %-10s ${C_UDP}%-9s${NC} ${BLUE}│${NC}      %-10s ${C_CRON}%-9s${NC}     $V\n" "ZIVPN UDP:" "$S_UDP" "AUTO XP:" "$S_CRON"
     echo -e "$B_BOT"
 }
 
@@ -81,8 +122,6 @@ while true; do
     header
     
     # 3. MENU BOX (2 Kolom Rapat)
-    # Struktur: [NO] Nama Menu (Kiri) | [NO] Nama Menu (Kanan)
-    
     echo -e "${BLUE}┌─────────────────────${CYAN}[ MENU ]${BLUE}───────────────────────┐${NC}"
     printf "${BLUE}│${NC} ${GREEN}[01]${NC} %-18s ${BLUE}│${NC} ${GREEN}[06]${NC} %-18s ${BLUE}│${NC}\n" "Create User" "Change Domain"
     printf "${BLUE}│${NC} ${GREEN}[02]${NC} %-18s ${BLUE}│${NC} ${GREEN}[07]${NC} %-18s ${BLUE}│${NC}\n" "Create Trial" "Force Delete Exp"
@@ -116,7 +155,9 @@ while true; do
             systemctl restart $SERVICE_NAME
             
             if [ -f "/usr/bin/zivbot" ]; then zivbot create "$new_pass" "$exp_display" & fi
-            echo -e "${GREEN}Success! User: $new_pass | Exp: $exp_display${NC}"
+            
+            # TAMPILKAN STRUK
+            show_receipt "$new_pass" "$new_pass" "$exp_display"
             ;;
 
         2|02)
@@ -127,14 +168,16 @@ while true; do
             if [[ ! $trial_min =~ ^[0-9]+$ ]]; then trial_min=30; fi
             
             exp_date=$(date -d "+${trial_min} minutes" +%s)
-            exp_display=$(date -d "+${trial_min} minutes" +"%H:%M:%S")
+            exp_display=$(date -d "+${trial_min} minutes" +"%Y-%m-%d %H:%M:%S")
             
             jq --arg pass "$trial_user" '.auth.config += [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
             echo "${trial_user}:${exp_date}" >> $DB_FILE
             systemctl restart $SERVICE_NAME
             
             if [ -f "/usr/bin/zivbot" ]; then zivbot create "$trial_user" "$exp_display (Trial)" & fi
-            echo -e "${GREEN}Trial Created! Valid: $trial_min Min${NC}"
+            
+            # TAMPILKAN STRUK
+            show_receipt "$trial_user" "$trial_user" "$exp_display (Trial)"
             ;;
 
         3|03)
@@ -150,24 +193,59 @@ while true; do
                 echo "${renew_pass}:${new_exp}" >> /tmp/db_tmp; mv /tmp/db_tmp $DB_FILE
                 
                 if [ -f "/usr/bin/zivbot" ]; then zivbot renew "$renew_pass" "$new_date" & fi
-                echo -e "${GREEN}Renew Success! New Exp: $new_date${NC}"
+                
+                # TAMPILKAN STRUK
+                show_receipt "$renew_pass" "$renew_pass" "$new_date (Renewed)"
             else
                 echo -e "${RED}User not in DB!${NC}"
             fi
             ;;
 
         4|04)
-            echo -e "${CYAN}--- DELETE USER ---${NC}"
-            read -p "Username : " del_pass
-            if jq -e --arg pass "$del_pass" '.auth.config | index($pass)' $CONFIG_FILE > /dev/null; then
+            echo -e "${CYAN}--- DELETE USER (Select) ---${NC}"
+            
+            # Logic Hapus User dengan Pilihan Nomor
+            i=1
+            usernames=()
+            
+            echo -e "${BLUE}┌─────┬──────────────────────┐${NC}"
+            echo -e "${BLUE}│${NC} NO  ${BLUE}│${NC} USERNAME             ${BLUE}│${NC}"
+            echo -e "${BLUE}├─────┼──────────────────────┤${NC}"
+            
+            # Loop user dari config
+            while read -r user; do
+                usernames+=("$user")
+                printf "${BLUE}│${NC} %-3s ${BLUE}│${NC} %-20s ${BLUE}│${NC}\n" "$i" "$user"
+                ((i++))
+            done < <(jq -r '.auth.config[]' $CONFIG_FILE)
+            
+            echo -e "${BLUE}└─────┴──────────────────────┘${NC}"
+            echo -e ""
+            
+            if [ ${#usernames[@]} -eq 0 ]; then
+                echo -e "${RED}Tidak ada user untuk dihapus.${NC}"
+                read -n 1 -s -r -p "Tekan Enter..."
+                continue
+            fi
+            
+            read -p " Pilih Nomor User (1-${#usernames[@]}): " selection
+            
+            # Validasi Input
+            if [[ ! "$selection" =~ ^[0-9]+$ ]] || [ "$selection" -lt 1 ] || [ "$selection" -gt "${#usernames[@]}" ]; then
+                echo -e "${RED}Pilihan tidak valid!${NC}"
+            else
+                # Ambil nama user berdasarkan array index (index mulai 0, jadi selection - 1)
+                del_pass="${usernames[$((selection-1))]}"
+                
+                echo -e "Menghapus user: ${YELLOW}$del_pass${NC} ..."
+                
+                # Eksekusi Hapus
                 jq --arg pass "$del_pass" '.auth.config -= [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
                 grep -v "^${del_pass}:" $DB_FILE > /tmp/db_tmp && mv /tmp/db_tmp $DB_FILE
                 systemctl restart $SERVICE_NAME
                 
                 if [ -f "/usr/bin/zivbot" ]; then zivbot delete "$del_pass" & fi
-                echo -e "${GREEN}User deleted.${NC}"
-            else
-                echo -e "${RED}Not found!${NC}"
+                echo -e "${GREEN}Sukses! User '$del_pass' telah dihapus.${NC}"
             fi
             ;;
 
