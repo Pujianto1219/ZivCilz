@@ -1,6 +1,9 @@
 #!/bin/bash
-# Zivpn UDP Installer - Auto Start Menu
+# Zivpn UDP Installer - Fixed Trial & Timezone
 # Repo: https://github.com/Pujianto1219/ZivCilz
+
+# SET TIMEZONE ASIA/JAKARTA
+timedatectl set-timezone Asia/Jakarta
 
 # Warna
 RED='\033[0;31m'
@@ -20,7 +23,7 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (AUTO MENU LOGIN) "
+echo -e "   ZIVPN UDP INSTALLER (WIB TIMEZONE)    "
 echo -e "${CYAN}=========================================${NC}"
 
 # 2. IP Validation
@@ -62,7 +65,7 @@ echo -e "${YELLOW}[3/11] Installing Dependencies...${NC}"
 apt-get update -y
 apt-get install wget openssl dnsutils iptables jq zip cron -y >/dev/null 2>&1
 
-# 5. Domain Configuration (Manual Input + Save)
+# 5. Domain Configuration
 echo -e "${YELLOW}[4/11] Domain Configuration${NC}"
 mkdir -p /etc/zivpn
 echo -e "Pastikan domain diarahkan ke IP: ${GREEN}$MYIP${NC}"
@@ -76,7 +79,6 @@ while true; do
         continue
     fi
     
-    # Simpan domain
     echo "$domain_input" > /etc/zivpn/domain
     echo -e "${GREEN}[OK] Domain set to: $domain_input${NC}"
     break
@@ -146,8 +148,6 @@ systemctl daemon-reload
 systemctl enable zivpn.service
 systemctl start zivpn.service
 
-# Firewall
-DEFAULT_IFACE=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
 if [ -n "$DEFAULT_IFACE" ]; then
     iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
 fi
@@ -191,10 +191,12 @@ rm -rf /root/backup
 EOF
 chmod +x /usr/bin/backup-zivpn
 
-# C. Cronjob
+# C. Cronjob (PERBAIKAN UTAMA: Per Menit)
 sed -i "/xp-zivpn/d" /etc/crontab
 sed -i "/backup-zivpn/d" /etc/crontab
-echo "0 0 * * * root /usr/bin/xp-zivpn" >> /etc/crontab
+# XP jalan SETIAP MENIT agar trial valid
+echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
+# Backup jalan jam 5 pagi
 echo "0 5 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
 service cron restart
 
@@ -203,29 +205,22 @@ echo -e "${YELLOW}[10/11] Installing Menu & Auto-Start...${NC}"
 wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
 chmod +x /usr/bin/menu
 
-# --- AUTO START MENU CONFIGURATION ---
-# 1. Hilangkan pesan welcome bawaan ubuntu (System load, dll)
 touch /root/.hushlogin
-
-# 2. Pasang menu otomatis di .bashrc jika belum ada
 if ! grep -q "menu" /root/.bashrc; then
     echo "if [ -t 0 ]; then menu; fi" >> /root/.bashrc
 fi
-# -------------------------------------
 
-# Final Cleanup
 rm -f zi.* 2>/dev/null
 rm -f "$0" 
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "      INSTALASI SELESAI (AUTO-LOGIN)     "
+echo -e "      INSTALASI SELESAI (FIXED WIB)      "
 echo -e "${CYAN}=========================================${NC}"
 echo -e " Domain     : $domain_input"
 echo -e " Auto Pass  : $RANDOM_PASS"
-echo -e " Port       : 5667 (UDP)"
+echo -e " Timezone   : Asia/Jakarta"
+echo -e " Trial XP   : Auto-Delete (Per Minute)"
 echo -e "${CYAN}=========================================${NC}"
-echo -e " Script ini akan terhapus otomatis."
-echo -e " VPS akan langsung masuk ke MENU saat Login."
 sleep 3
 clear
 menu
