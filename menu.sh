@@ -2,7 +2,7 @@
 # Zivpn Management Menu (Ultimate Edition - Fixed Timezone)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
-# SET TIMEZONE ASIA/JAKARTA (WIB)
+# 1. SET TIMEZONE ASIA/JAKARTA (WIB) AGAR TRIAL AKURAT
 timedatectl set-timezone Asia/Jakarta
 
 # Warna
@@ -50,10 +50,10 @@ header() {
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
     CPU_MODEL=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//' | head -1 | awk '{print $1,$2,$3}')
     
-    # Ambil Data IP & Region
-    MYIP=$(curl -sS ipinfo.io/ip)
-    ISP=$(curl -sS ipinfo.io/org)
-    CITY=$(curl -sS ipinfo.io/city)
+    # Ambil Data IP & Region (Gunakan curl/wget)
+    MYIP=$(wget -qO- ipinfo.io/ip)
+    ISP=$(wget -qO- ipinfo.io/org)
+    CITY=$(wget -qO- ipinfo.io/city)
     DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
     
     # Waktu Server
@@ -201,7 +201,7 @@ while true; do
                              exp_date_str=$(date -d "@$exp_timestamp" +"%Y-%m-%d")
                          fi
                     else
-                         exp_date_str="EXPIRED"
+                         exp_date_str="${RED}EXPIRED${NC}"
                     fi
                 else
                     exp_date_str="Unlimited"
