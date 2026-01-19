@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn Management Menu (Integrated with XP & Backup)
+# Zivpn Management Menu (Ultimate Edition)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # Warna
@@ -8,11 +8,14 @@ GREEN='\033[0;32m'
 CYAN='\033[0;36m'
 YELLOW='\033[1;33m'
 WHITE='\033[1;37m'
+BLUE='\033[0;34m'
 NC='\033[0m'
 
 # Konfigurasi
 CONFIG_FILE="/etc/zivpn/config.json"
 DB_FILE="/etc/zivpn/akun.db"
+DOMAIN_FILE="/etc/zivpn/domain"
+BOT_FILE="/etc/zivpn/bot_data"
 SERVICE_NAME="zivpn.service"
 
 # Cek Root
@@ -21,167 +24,244 @@ if [[ $EUID -ne 0 ]]; then
    exit 1
 fi
 
-# Pastikan DB ada
+# Pastikan DB & Domain file ada
 touch $DB_FILE
+mkdir -p /etc/zivpn
 
-# Fungsi Header
+# Fungsi Header Info
 header() {
     clear
-    echo -e "${CYAN}=======================================${NC}"
-    echo -e "${WHITE}       ZIVPN UDP MANAGEMENT MENU       ${NC}"
-    echo -e "${CYAN}=======================================${NC}"
+    # Banner ASCII ZIVCILZ
+    echo -e "${CYAN}"
+    echo -e "███████╗██╗██╗   ██╗ ██████╗██╗██╗     ███████╗"
+    echo -e "╚══███╔╝██║██║   ██║██╔════╝██║██║     ╚══███╔╝"
+    echo -e "  ███╔╝ ██║██║   ██║██║     ██║██║       ███╔╝ "
+    echo -e " ███╔╝  ██║╚██╗ ██╔╝██║     ██║██║      ███╔╝  "
+    echo -e "███████╗██║ ╚████╔╝ ╚██████╗██║███████╗███████╗"
+    echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
+    echo -e "${NC}"
+    echo -e "${YELLOW}====================================================${NC}"
     
-    # Info Domain & IP
-    DOMAIN=$(cat /etc/zivpn/domain 2>/dev/null || echo "Tidak ada domain")
-    MYIP=$(wget -qO- ipinfo.io/ip || curl -s ifconfig.me)
-    echo -e " Host/IP : ${YELLOW}$MYIP${NC}"
-    echo -e " Domain  : ${YELLOW}$DOMAIN${NC}"
+    # System Info Calculation
+    # RAM
+    RAM_USED=$(free -m | grep Mem | awk '{print $3}')
+    RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
+    # CPU
+    CPU_MODEL=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//' | head -1 | awk '{print $1,$2,$3}')
+    # IP & Region (Menggunakan API lightweight)
+    RAW_JSON=$(curl -s ipinfo.io)
+    MYIP=$(echo $RAW_JSON | jq -r '.ip')
+    REGION=$(echo $RAW_JSON | jq -r '.region')
+    ISP=$(echo $RAW_JSON | jq -r '.org')
+    DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
+
+    echo -e " OS      : $(cat /etc/os-release | grep -w PRETTY_NAME | head -n1 | sed 's/PRETTY_NAME//g' | sed 's/=//g' | sed 's/"//g')"
+    echo -e " CPU     : $CPU_MODEL"
+    echo -e " RAM     : ${GREEN}${RAM_USED}MB${NC} / ${GREEN}${RAM_TOTAL}MB${NC}"
+    echo -e " ISP     : $ISP"
+    echo -e " Region  : $REGION"
+    echo -e " IP VPS  : $MYIP"
+    echo -e " Domain  : ${GREEN}$DOMAIN${NC}"
     
     # Cek Status Service
     if systemctl is-active --quiet $SERVICE_NAME; then
-        echo -e " Status  : ${GREEN}RUNNING${NC}"
+        echo -e " Status  : ${GREEN}● RUNNING${NC}"
     else
-        echo -e " Status  : ${RED}STOPPED${NC}"
+        echo -e " Status  : ${RED}● STOPPED${NC}"
     fi
-    echo -e "${CYAN}=======================================${NC}"
+    echo -e "${YELLOW}====================================================${NC}"
 }
 
 # Main Loop
 while true; do
     header
-    echo -e "[1] Create User (Buat Akun)"
-    echo -e "[2] Delete User (Hapus Akun)"
-    echo -e "[3] Renew User (Perpanjang Akun)"
-    echo -e "[4] User List (Lihat Daftar User)"
-    echo -e "[5] Manual Backup"
-    echo -e "[6] Restart Service"
-    echo -e "[x] Exit"
+    echo -e " [1]  Create User (Buat Akun Reguler)"
+    echo -e " [2]  ${CYAN}Create Trial (Akun Sementara/Menit)${NC}"
+    echo -e " [3]  Delete User (Hapus Akun)"
+    echo -e " [4]  Renew User (Perpanjang Akun)"
+    echo -e " [5]  User List (Lihat Daftar User)"
+    echo -e " [6]  ${CYAN}Change Domain (Ganti Domain)${NC}"
+    echo -e " [7]  ${CYAN}Setup Bot Telegram (Backup Notif)${NC}"
+    echo -e " [8]  Force Delete Expired (Manual XP)"
+    echo -e " [9]  Manual Backup Data"
+    echo -e " [10] Restart Service"
+    echo -e " [x]  Exit"
     echo -e ""
-    read -p "Select Option: " opt
+    read -p " Select Option: " opt
 
     case $opt in
-        1)
+        1) # Create User
             echo -e ""
-            echo -e "${CYAN}--- CREATE USER ---${NC}"
-            read -p "Username/Password : " new_pass
+            echo -e "${CYAN}--- CREATE REGULAR USER ---${NC}"
+            read -p "Username : " new_pass
             if [ -z "$new_pass" ]; then echo -e "${RED}Tidak boleh kosong!${NC}"; sleep 1; continue; fi
             
-            # Cek duplikat
             if grep -q "\"$new_pass\"" $CONFIG_FILE; then
-                echo -e "${RED}User '$new_pass' sudah ada!${NC}"
-                sleep 2
-                continue
+                echo -e "${RED}User '$new_pass' sudah ada!${NC}"; sleep 2; continue
             fi
 
             read -p "Masa Aktif (Hari) : " masa_aktif
-            if [[ ! $masa_aktif =~ ^[0-9]+$ ]]; then
-                masa_aktif=30
-                echo -e "${YELLOW}Input salah, default ke 30 hari.${NC}"
-            fi
+            if [[ ! $masa_aktif =~ ^[0-9]+$ ]]; then masa_aktif=30; fi
 
-            # Hitung Expired
             exp_date=$(date -d "+${masa_aktif} days" +%s)
             exp_date_display=$(date -d "+${masa_aktif} days" +"%Y-%m-%d")
 
-            # Backup Config
             cp $CONFIG_FILE $CONFIG_FILE.bak
-            
-            # Add ke JSON
             jq --arg pass "$new_pass" '.auth.config += [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
-            
-            # Add ke Database (untuk Auto Delete)
             echo "${new_pass}:${exp_date}" >> $DB_FILE
-
             systemctl restart $SERVICE_NAME
             
+            echo -e "${GREEN}Sukses! User dibuat.${NC}"
+            echo -e "User: $new_pass | Exp: $exp_date_display"
+            ;;
+
+        2) # Create Trial
             echo -e ""
-            echo -e "${GREEN}Sukses! User berhasil dibuat.${NC}"
-            echo -e "User/Pass : ${YELLOW}$new_pass${NC}"
-            echo -e "Expired   : ${YELLOW}$exp_date_display${NC}"
+            echo -e "${CYAN}--- CREATE TRIAL USER ---${NC}"
+            read -p "Username Trial : " trial_user
+            if [ -z "$trial_user" ]; then echo -e "${RED}Tidak boleh kosong!${NC}"; sleep 1; continue; fi
+            
+            if grep -q "\"$trial_user\"" $CONFIG_FILE; then
+                echo -e "${RED}User '$trial_user' sudah ada!${NC}"; sleep 2; continue
+            fi
+
+            read -p "Durasi (Menit) : " trial_min
+            if [[ ! $trial_min =~ ^[0-9]+$ ]]; then trial_min=30; echo "Default 30 menit."; fi
+
+            # Hitung Detik
+            exp_date=$(date -d "+${trial_min} minutes" +%s)
+            exp_date_display=$(date -d "+${trial_min} minutes" +"%H:%M:%S")
+
+            jq --arg pass "$trial_user" '.auth.config += [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
+            echo "${trial_user}:${exp_date}" >> $DB_FILE
+            systemctl restart $SERVICE_NAME
+            
+            echo -e "${GREEN}Trial Sukses!${NC}"
+            echo -e "User: $trial_user | Valid: $trial_min Menit ($exp_date_display)"
             ;;
         
-        2)
+        3) # Delete User
             echo -e ""
             echo -e "${CYAN}--- DELETE USER ---${NC}"
-            # Tampilkan user dulu
             jq -r '.auth.config[]' $CONFIG_FILE
             echo -e ""
-            read -p "Masukkan User yang akan DIHAPUS: " del_pass
+            read -p "User to Delete: " del_pass
             
             if jq -e --arg pass "$del_pass" '.auth.config | index($pass)' $CONFIG_FILE > /dev/null; then
-                # Hapus dari JSON
                 jq --arg pass "$del_pass" '.auth.config -= [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
-                # Hapus dari DB
                 grep -v "^${del_pass}:" $DB_FILE > /tmp/db_tmp && mv /tmp/db_tmp $DB_FILE
-                
                 systemctl restart $SERVICE_NAME
-                echo -e "${GREEN}User '$del_pass' berhasil dihapus.${NC}"
+                echo -e "${GREEN}User '$del_pass' dihapus.${NC}"
             else
                 echo -e "${RED}User tidak ditemukan!${NC}"
             fi
             ;;
 
-        3)
+        4) # Renew User
             echo -e ""
             echo -e "${CYAN}--- RENEW USER ---${NC}"
-            read -p "Masukkan User: " renew_pass
-            
-            # Cek apakah user ada di DB
+            read -p "User: " renew_pass
             if grep -q "^${renew_pass}:" $DB_FILE; then
-                read -p "Tambah Masa Aktif (Hari): " add_days
-                
-                # Ambil expired lama
+                read -p "Tambah Hari: " add_days
                 current_exp=$(grep "^${renew_pass}:" $DB_FILE | cut -d: -f2)
-                # Tambah hari
                 new_exp=$(date -d "@$current_exp + $add_days days" +%s)
                 new_date_display=$(date -d "@$new_exp" +"%Y-%m-%d")
-
-                # Update DB
+                
                 grep -v "^${renew_pass}:" $DB_FILE > /tmp/db_tmp
                 echo "${renew_pass}:${new_exp}" >> /tmp/db_tmp
                 mv /tmp/db_tmp $DB_FILE
-                
-                echo -e "${GREEN}Sukses! Expired baru: $new_date_display${NC}"
+                echo -e "${GREEN}Perpanjang Sukses! Exp baru: $new_date_display${NC}"
             else
-                echo -e "${RED}User tidak ditemukan di Database Expired!${NC}"
-                echo -e "${YELLOW}Tips: Hapus user lalu buat ulang jika user lama tidak ada di DB.${NC}"
+                echo -e "${RED}User tidak ditemukan di Database!${NC}"
             fi
             ;;
 
-        4)
+        5) # User List
             echo -e ""
-            echo -e "${CYAN}--- USER LIST & EXPIRY ---${NC}"
-            echo -e "User             | Expired Date"
+            echo -e "${CYAN}--- USER LIST ---${NC}"
+            echo -e "User             | Expired"
             echo -e "-----------------------------------"
-            
-            # Loop config JSON
             for user in $(jq -r '.auth.config[]' $CONFIG_FILE); do
-                # Ambil tanggal dari DB
                 exp_timestamp=$(grep "^${user}:" $DB_FILE | cut -d: -f2)
-                
                 if [[ -n "$exp_timestamp" && "$exp_timestamp" =~ ^[0-9]+$ ]]; then
-                    exp_date_str=$(date -d "@$exp_timestamp" +"%Y-%m-%d")
+                    # Cek apakah expired hari ini/besok atau jam (untuk trial)
+                    if [ "$exp_timestamp" -gt "$(date +%s)" ]; then
+                         # Tampilkan Jam Menit jika kurang dari 24 jam (Trial)
+                         diff=$(($exp_timestamp - $(date +%s)))
+                         if [ $diff -lt 86400 ]; then
+                             exp_date_str=$(date -d "@$exp_timestamp" +"%H:%M (%d-%b)")
+                         else
+                             exp_date_str=$(date -d "@$exp_timestamp" +"%Y-%m-%d")
+                         fi
+                    else
+                         exp_date_str="${RED}EXPIRED${NC}"
+                    fi
                 else
-                    exp_date_str="Unlimited/No-DB"
+                    exp_date_str="Permanent"
                 fi
                 printf "%-16s | %s\n" "$user" "$exp_date_str"
             done
             echo -e "-----------------------------------"
             ;;
 
-        5)
+        6) # Ganti Domain
             echo -e ""
-            echo -e "${YELLOW}Running Backup Script...${NC}"
-            if [ -f "/usr/bin/backup-zivpn" ]; then
-                /usr/bin/backup-zivpn
-                echo -e "${GREEN}Backup selesai! Cek folder /root.${NC}"
+            echo -e "${CYAN}--- CHANGE DOMAIN ---${NC}"
+            echo -e "Domain Saat Ini: $(cat $DOMAIN_FILE 2>/dev/null)"
+            read -p "Masukkan Domain Baru: " new_domain
+            if [ -z "$new_domain" ]; then echo -e "${RED}Batal.${NC}"; continue; fi
+            
+            echo "$new_domain" > $DOMAIN_FILE
+            
+            # Regenerate SSL Self-Signed agar cocok dengan domain baru
+            echo -e "${YELLOW}Updating SSL Certificate...${NC}"
+            openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$new_domain" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
+            
+            systemctl restart $SERVICE_NAME
+            echo -e "${GREEN}Domain berhasil diubah ke: $new_domain${NC}"
+            ;;
+
+        7) # Setup Bot Telegram
+            echo -e ""
+            echo -e "${CYAN}--- SETUP BOT TELEGRAM (Backup) ---${NC}"
+            read -p "Bot Token : " bot_token
+            read -p "Chat ID   : " chat_id
+            
+            if [[ -z "$bot_token" || -z "$chat_id" ]]; then
+                echo -e "${RED}Data tidak lengkap.${NC}"
             else
-                echo -e "${RED}Script backup tidak ditemukan!${NC}"
+                # Simpan Format token:chatid
+                echo "${bot_token}:${chat_id}" > $BOT_FILE
+                echo -e "${GREEN}Data Bot tersimpan!${NC}"
+                echo -e "Coba jalankan Manual Backup untuk test."
             fi
             ;;
 
-        6)
-            echo -e "${YELLOW}Restarting Zivpn Service...${NC}"
+        8) # Manual XP
+            echo -e ""
+            echo -e "${YELLOW}Menjalankan Script Auto-Delete Expired...${NC}"
+            if [ -f "/usr/bin/xp-zivpn" ]; then
+                /usr/bin/xp-zivpn
+                echo -e "${GREEN}Selesai check & delete expired user.${NC}"
+            else
+                echo -e "${RED}Script XP tidak ditemukan.${NC}"
+            fi
+            ;;
+
+        9) # Backup
+            echo -e ""
+            echo -e "${YELLOW}Running Backup...${NC}"
+            if [ -f "/usr/bin/backup-zivpn" ]; then
+                /usr/bin/backup-zivpn
+                echo -e "${GREEN}Backup Done.${NC}"
+                # Cek jika bot diset, beri info
+                if [ -f "$BOT_FILE" ]; then echo -e "Cek Telegram Anda jika konfigurasi bot benar."; fi
+            else
+                echo -e "${RED}Script backup tidak ditemukan.${NC}"
+            fi
+            ;;
+
+        10) # Restart
             systemctl restart $SERVICE_NAME
             echo -e "${GREEN}Service Restarted.${NC}"
             ;;
@@ -196,5 +276,5 @@ while true; do
     esac
     
     echo -e ""
-    read -n 1 -s -r -p "Tekan sembarang tombol untuk kembali..."
+    read -n 1 -s -r -p "Tekan Enter untuk kembali..."
 done
