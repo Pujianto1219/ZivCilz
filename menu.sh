@@ -1,8 +1,8 @@
 #!/bin/bash
-# Zivpn Management Menu (Ultimate Edition - Fixed Timezone)
+# Zivpn Management Menu (Ultimate Edition - Fixed Bot)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
-# 1. SET TIMEZONE ASIA/JAKARTA (WIB) AGAR TRIAL AKURAT
+# 1. SET TIMEZONE ASIA/JAKARTA
 timedatectl set-timezone Asia/Jakarta
 
 # Warna
@@ -50,7 +50,7 @@ header() {
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
     CPU_MODEL=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//' | head -1 | awk '{print $1,$2,$3}')
     
-    # Ambil Data IP & Region (Gunakan curl/wget)
+    # Ambil Data IP & Region
     MYIP=$(wget -qO- ipinfo.io/ip)
     ISP=$(wget -qO- ipinfo.io/org)
     CITY=$(wget -qO- ipinfo.io/city)
@@ -117,6 +117,11 @@ while true; do
             echo "${new_pass}:${exp_date}" >> $DB_FILE
             systemctl restart $SERVICE_NAME
             
+            # NOTIFIKASI BOT
+            if [ -f "/usr/bin/zivbot" ]; then
+                zivbot create "$new_pass" "$exp_date_display" &
+            fi
+            
             echo -e "${GREEN}Sukses! User dibuat.${NC}"
             echo -e "User: $new_pass | Exp: $exp_date_display"
             ;;
@@ -142,6 +147,11 @@ while true; do
             echo "${trial_user}:${exp_date}" >> $DB_FILE
             systemctl restart $SERVICE_NAME
             
+            # NOTIFIKASI BOT
+            if [ -f "/usr/bin/zivbot" ]; then
+                zivbot create "$trial_user" "$exp_date_display (Trial)" &
+            fi
+            
             echo -e "${GREEN}Trial Sukses!${NC}"
             echo -e "User: $trial_user | Valid: $trial_min Menit ($exp_date_display)"
             ;;
@@ -157,6 +167,12 @@ while true; do
                 jq --arg pass "$del_pass" '.auth.config -= [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
                 grep -v "^${del_pass}:" $DB_FILE > /tmp/db_tmp && mv /tmp/db_tmp $DB_FILE
                 systemctl restart $SERVICE_NAME
+                
+                # NOTIFIKASI BOT
+                if [ -f "/usr/bin/zivbot" ]; then
+                    zivbot delete "$del_pass" &
+                fi
+                
                 echo -e "${GREEN}User '$del_pass' dihapus.${NC}"
             else
                 echo -e "${RED}User tidak ditemukan!${NC}"
@@ -176,6 +192,12 @@ while true; do
                 grep -v "^${renew_pass}:" $DB_FILE > /tmp/db_tmp
                 echo "${renew_pass}:${new_exp}" >> /tmp/db_tmp
                 mv /tmp/db_tmp $DB_FILE
+                
+                # NOTIFIKASI BOT
+                if [ -f "/usr/bin/zivbot" ]; then
+                    zivbot renew "$renew_pass" "$new_date_display" &
+                fi
+                
                 echo -e "${GREEN}Perpanjang Sukses! Exp baru: $new_date_display${NC}"
             else
                 echo -e "${RED}User tidak ditemukan di Database!${NC}"
@@ -228,19 +250,16 @@ while true; do
             echo -e "${GREEN}Domain berhasil diubah ke: $new_domain${NC}"
             ;;
 
-        7) # Setup Bot Telegram
+        7) # Setup Bot Telegram (FIXED: Calls External Script)
             echo -e ""
-            echo -e "${CYAN}--- SETUP BOT TELEGRAM (Backup) ---${NC}"
-            read -p "Bot Token : " bot_token
-            read -p "Chat ID   : " chat_id
+            echo -e "${CYAN}--- SETUP BOT TELEGRAM ---${NC}"
             
-            if [[ -z "$bot_token" || -z "$chat_id" ]]; then
-                echo -e "${RED}Data tidak lengkap.${NC}"
+            if [ -f "/usr/bin/zivbot" ]; then
+                # PANGGIL SCRIPT BOT TERPISAH
+                zivbot setup
             else
-                # Simpan Format token:chatid
-                echo "${bot_token}:${chat_id}" > $BOT_FILE
-                echo -e "${GREEN}Data Bot tersimpan!${NC}"
-                echo -e "Coba jalankan Manual Backup untuk test."
+                echo -e "${RED}Script Bot (zivbot) tidak ditemukan!${NC}"
+                echo -e "${YELLOW}Silakan update script installer Anda.${NC}"
             fi
             ;;
 
