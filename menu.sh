@@ -1,20 +1,20 @@
 #!/bin/bash
-# Zivpn Management Menu (Blue-Red Theme & Client Info)
+# Zivpn Management Menu (Secure IP Gatekeeper + Glowing Theme)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # 1. SET TIMEZONE
 timedatectl set-timezone Asia/Jakarta
 
-# --- DEFINISI WARNA ---
-# Format: \e[1;3xm (Bold + Color)
-RED='\e[1;31m'
-GREEN='\e[1;32m'
-YELLOW='\e[1;33m'
-BLUE='\e[1;34m'
-PURPLE='\e[1;35m'
-CYAN='\e[1;36m'
-WHITE='\e[1;37m'
-NC='\e[0m'
+# --- WARNA ULTRA BRIGHT (GLOWING) ---
+# Menggunakan kode '1;9x' untuk efek tebal dan terang
+RED='\033[1;91m'      # Merah Menyala
+GREEN='\033[1;92m'    # Hijau Menyala
+YELLOW='\033[1;93m'   # Kuning Emas
+BLUE='\033[1;94m'     # Biru Elektrik
+PURPLE='\033[1;95m'   # Ungu Neon
+CYAN='\033[1;96m'     # Cyan Terang
+WHITE='\033[1;97m'    # Putih Bersih
+NC='\033[0m'          # Reset
 
 # --- KONFIGURASI ---
 CONFIG_FILE="/etc/zivpn/config.json"
@@ -23,7 +23,7 @@ DOMAIN_FILE="/etc/zivpn/domain"
 PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
 SERVICE_NAME="zivpn.service"
 
-# Cek Root
+# --- CEK ROOT ---
 if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}Harus dijalankan sebagai root!${NC}" 
    exit 1
@@ -32,19 +32,71 @@ fi
 touch $DB_FILE
 mkdir -p /etc/zivpn
 
+# =================================================================
+# 🛡️ GATEKEEPER SYSTEM (CEK IP SEBELUM MASUK MENU)
+# =================================================================
+MYIP=$(wget -qO- ipinfo.io/ip)
+# Mengambil data dari github
+RAW_DATA=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
+
+# Logika Validasi
+VALID_IP=false
+if [[ -n "$RAW_DATA" ]]; then
+    CLIENT_NAME=$(echo "$RAW_DATA" | awk '{print $2}')
+    LICENSE_EXP=$(echo "$RAW_DATA" | awk '{print $3}')
+    
+    # Cek Tanggal Expired (Simple String Comparison YYYY-MM-DD)
+    TODAY=$(date +%Y-%m-%d)
+    if [[ "$LICENSE_EXP" > "$TODAY" || "$LICENSE_EXP" == "$TODAY" ]]; then
+        VALID_IP=true
+    else
+        STATUS_MSG="LICENSE EXPIRED"
+    fi
+else
+    STATUS_MSG="IP NOT REGISTERED"
+fi
+
+# JIKA IP TIDAK VALID / EXPIRED -> TAMPILKAN PERINGATAN & EXIT
+if [ "$VALID_IP" = false ]; then
+    clear
+    echo -e "${RED}██████╗ ███████╗███╗   ██╗██╗███████╗██████╗ ${NC}"
+    echo -e "${RED}██╔══██╗██╔════╝████╗  ██║██║██╔════╝██╔══██╗${NC}"
+    echo -e "${RED}██║  ██║█████╗  ██╔██╗ ██║██║█████╗  ██║  ██║${NC}"
+    echo -e "${RED}██║  ██║██╔══╝  ██║╚██╗██║██║██╔══╝  ██║  ██║${NC}"
+    echo -e "${RED}██████╔╝███████╗██║ ╚████║██║███████╗██████╔╝${NC}"
+    echo -e "${RED}╚═════╝ ╚══════╝╚═╝  ╚═══╝╚═╝╚══════╝╚═════╝ ${NC}"
+    echo -e ""
+    echo -e "${WHITE}══════════════════════════════════════════════════${NC}"
+    echo -e " ${RED}⚠️  ACCESS DENIED: ${STATUS_MSG} ⚠️${NC}"
+    echo -e "${WHITE}══════════════════════════════════════════════════${NC}"
+    echo -e ""
+    echo -e " Your IP  : ${YELLOW}$MYIP${NC}"
+    echo -e " Status   : ${RED}Inactive / Not Found${NC}"
+    echo -e ""
+    echo -e " ${CYAN}Silakan Hubungi Admin untuk Mendaftarkan IP Anda:${NC}"
+    echo -e " ${GREEN}WhatsApp : 087733994799${NC}"
+    echo -e " ${GREEN}Telegram : @AcilOffcial${NC}"
+    echo -e ""
+    echo -e "${WHITE}══════════════════════════════════════════════════${NC}"
+    exit 0
+fi
+
+# =================================================================
+# ✅ MASUK MENU UTAMA (HANYA JIKA IP VALID)
+# =================================================================
+
 # --- FUNGSI STATUS ---
 get_status() {
     if systemctl is-active --quiet zivpn; then S_UDP="ON "; else S_UDP="OFF"; fi
     if systemctl is-active --quiet cron; then S_CRON="ON "; else S_CRON="OFF"; fi
 }
 
-# --- FUNGSI STRUK (RECEIPT) ---
+# --- FUNGSI STRUK ---
 show_receipt() {
     local user=$1
     local pass=$2
     local exp=$3
     
-    MYIP=$(wget -qO- ipinfo.io/ip)
     CITY=$(wget -qO- ipinfo.io/city)
     ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10)
     DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "$MYIP")
@@ -69,43 +121,24 @@ header() {
     clear
     get_status
     
-    # 1. Ambil Data System
+    # Data System
     RAM_USED=$(free -m | grep Mem | awk '{print $3}')
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
-    MYIP=$(wget -qO- ipinfo.io/ip)
     RAW_DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
     DOMAIN="${RAW_DOMAIN:0:18}"
     DATE=$(date +"%d %b %Y")
-    
-    # Count Total Users
     TOTAL_USERS=$(jq '.auth.config | length' $CONFIG_FILE 2>/dev/null || echo "0")
     
-    # 2. Ambil Data Client (License)
-    # Format di Github diasumsikan: IP  NAMA  EXP
-    CLIENT_RAW=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
-    
-    if [[ -n "$CLIENT_RAW" ]]; then
-        CLIENT_NAME=$(echo "$CLIENT_RAW" | awk '{print $2}')
-        LICENSE_EXP=$(echo "$CLIENT_RAW" | awk '{print $3}')
-        # Fallback jika kolom kosong
-        if [ -z "$CLIENT_NAME" ]; then CLIENT_NAME="Premium User"; fi
-        if [ -z "$LICENSE_EXP" ]; then LICENSE_EXP="Lifetime"; fi
-    else
-        CLIENT_NAME="${RED}Unregistered${NC}"
-        LICENSE_EXP="${RED}Expired${NC}"
-    fi
-
-    # Layout Variables (Blue Borders)
+    # Layout Variables (Gunakan Warna Biru Kuat)
     C_BORDER=$BLUE
-    C_ACCENT=$RED
     
     TOP="${C_BORDER}┌────────────────────────────────────────────────────┐${NC}"
     MID="${C_BORDER}├────────────────────────────────────────────────────┤${NC}"
     BOT="${C_BORDER}└────────────────────────────────────────────────────┘${NC}"
     V="${C_BORDER}│${NC}"
 
-    # BANNER ASCII
-    echo -e "${BLUE}"
+    # 1. BANNER ASCII (STRONG COLOR)
+    echo -e "${CYAN}"
     echo -e "███████╗██╗██╗   ██╗ ██████╗██╗██╗     ███████╗"
     echo -e "╚══███╔╝██║██║   ██║██╔════╝██║██║     ╚══███╔╝"
     echo -e "  ███╔╝ ██║██║   ██║██║     ██║██║       ███╔╝ "
@@ -114,13 +147,13 @@ header() {
     echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
     echo -e "${NC}"
 
-    # BOX 1: CLIENT INFO & LICENSE (Kolom Sederhana Baru)
+    # 2. CLIENT INFO (LICENSE)
     echo -e "$TOP"
     printf "$V ${WHITE}%-10s${NC} : ${GREEN}%-35s${NC} $V\n" "CLIENT" "$CLIENT_NAME"
     printf "$V ${WHITE}%-10s${NC} : ${YELLOW}%-35s${NC} $V\n" "EXP IP" "$LICENSE_EXP"
     echo -e "$BOT"
     
-    # BOX 2: SYSTEM INFO
+    # 3. SYSTEM INFO
     echo -e "$TOP"
     printf "$V ${WHITE}%-6s${NC} : ${CYAN}%-16s${NC} ${C_BORDER}│${NC} ${WHITE}%-6s${NC} : ${CYAN}%-15s${NC} $V\n" "OS" "Ubuntu LTS" "IP" "$MYIP"
     printf "$V ${WHITE}%-6s${NC} : ${CYAN}%-16s${NC} ${C_BORDER}│${NC} ${WHITE}%-6s${NC} : ${CYAN}%-15s${NC} $V\n" "RAM" "$RAM_USED/$RAM_TOTAL MB" "USER" "$TOTAL_USERS Account"
@@ -139,14 +172,13 @@ header() {
 while true; do
     header
     
-    # MENU BOX (Blue Border, Red Accents for Number)
-    # Format: [NO] Nama Menu
+    # MENU BOX (Glowing White Text, Red Brackets, Yellow Numbers)
     echo -e "${BLUE}┌─────────────────────${WHITE}[ MENU ]${BLUE}───────────────────────┐${NC}"
-    printf "${BLUE}│${NC} ${RED}[01]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[06]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create User" "Change Domain"
-    printf "${BLUE}│${NC} ${RED}[02]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[07]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create Trial" "Force Delete Exp"
-    printf "${BLUE}│${NC} ${RED}[03]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[08]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Renew User" "Backup Data"
-    printf "${BLUE}│${NC} ${RED}[04]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[09]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Delete User" "Restore Backup"
-    printf "${BLUE}│${NC} ${RED}[05]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[10]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "User List" "Restart Service"
+    printf "${BLUE}│${NC} ${RED}[${YELLOW}01${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[${YELLOW}06${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create User" "Change Domain"
+    printf "${BLUE}│${NC} ${RED}[${YELLOW}02${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[${YELLOW}07${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create Trial" "Force Delete Exp"
+    printf "${BLUE}│${NC} ${RED}[${YELLOW}03${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[${YELLOW}08${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Renew User" "Backup Data"
+    printf "${BLUE}│${NC} ${RED}[${YELLOW}04${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[${YELLOW}09${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Delete User" "Restore Backup"
+    printf "${BLUE}│${NC} ${RED}[${YELLOW}05${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[${YELLOW}10${RED}]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "User List" "Restart Service"
     echo -e "${BLUE}└────────────────────────────────────────────────────┘${NC}"
     
     # EXIT BOX
@@ -299,25 +331,20 @@ while true; do
 
         7|07)
             echo -e ""
-            if [ -f "/usr/bin/zivbot" ]; then zivbot setup; else echo -e "${RED}Bot Script Missing!${NC}"; fi
+            echo -e "${YELLOW}Checking Expired Users...${NC}"
+            if [ -f "/usr/bin/xp-zivpn" ]; then /usr/bin/xp-zivpn; echo -e "${GREEN}Done.${NC}"; fi
             ;;
 
         8|08)
             echo -e ""
-            echo -e " ${YELLOW}Checking Expired Users...${NC}"
-            if [ -f "/usr/bin/xp-zivpn" ]; then /usr/bin/xp-zivpn; echo -e "${GREEN}Done.${NC}"; fi
-            ;;
-
-        9|09)
-            echo -e ""
-            echo -e " ${YELLOW}Creating Backup...${NC}"
+            echo -e "${YELLOW}Creating Backup...${NC}"
             if [ -f "/usr/bin/backup-zivpn" ]; then 
                 /usr/bin/backup-zivpn
                 echo -e "${GREEN}Backup sent to Telegram!${NC}"
             fi
             ;;
 
-        10)
+        9|09)
             echo -e ""
             echo -e " ${YELLOW}➤ RESTORE BACKUP${NC}"
             echo -e " ${WHITE}Paste Direct Link (ZIP format)${NC}"
@@ -341,7 +368,7 @@ while true; do
             rm -rf /root/restore
             ;;
 
-        11)
+        10)
             systemctl restart $SERVICE_NAME
             echo -e "${GREEN}Service Restarted.${NC}"
             ;;
