@@ -1,25 +1,26 @@
 #!/bin/bash
-# Zivpn Management Menu (Fixed Alignment & White Text)
+# Zivpn Management Menu (Blue-Red Theme & Client Info)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # 1. SET TIMEZONE
 timedatectl set-timezone Asia/Jakarta
 
 # --- DEFINISI WARNA ---
-RED='\033[1;31m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[1;34m'
-PURPLE='\033[1;35m'
-CYAN='\033[1;36m'
-WHITE='\033[1;37m'
-NC='\033[0m'
+# Format: \e[1;3xm (Bold + Color)
+RED='\e[1;31m'
+GREEN='\e[1;32m'
+YELLOW='\e[1;33m'
+BLUE='\e[1;34m'
+PURPLE='\e[1;35m'
+CYAN='\e[1;36m'
+WHITE='\e[1;37m'
+NC='\e[0m'
 
 # --- KONFIGURASI ---
 CONFIG_FILE="/etc/zivpn/config.json"
 DB_FILE="/etc/zivpn/akun.db"
 DOMAIN_FILE="/etc/zivpn/domain"
-BOT_FILE="/etc/zivpn/bot_data"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
 SERVICE_NAME="zivpn.service"
 
 # Cek Root
@@ -33,8 +34,6 @@ mkdir -p /etc/zivpn
 
 # --- FUNGSI STATUS ---
 get_status() {
-    # Kita buat status sederhana ON/OFF tanpa warna di variabel ini
-    # Warna akan ditambahkan saat printf agar tidak merusak kolom
     if systemctl is-active --quiet zivpn; then S_UDP="ON "; else S_UDP="OFF"; fi
     if systemctl is-active --quiet cron; then S_CRON="ON "; else S_CRON="OFF"; fi
 }
@@ -70,32 +69,42 @@ header() {
     clear
     get_status
     
-    # Ambil Data & Potong jika kepanjangan (Supaya kotak tidak jebol)
+    # 1. Ambil Data System
     RAM_USED=$(free -m | grep Mem | awk '{print $3}')
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
     MYIP=$(wget -qO- ipinfo.io/ip)
-    
-    # Domain max 18 karakter
     RAW_DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
-    DOMAIN="${RAW_DOMAIN:0:18}" 
-    
+    DOMAIN="${RAW_DOMAIN:0:18}"
     DATE=$(date +"%d %b %Y")
     
-    # ISP max 18 karakter
-    RAW_ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10)
-    ISP="${RAW_ISP:0:18}"
+    # Count Total Users
+    TOTAL_USERS=$(jq '.auth.config | length' $CONFIG_FILE 2>/dev/null || echo "0")
     
-    # Border Characters
-    C_BORDER=$PURPLE
-    C_LABEL=$CYAN
-    C_TEXT=$WHITE
+    # 2. Ambil Data Client (License)
+    # Format di Github diasumsikan: IP  NAMA  EXP
+    CLIENT_RAW=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
+    
+    if [[ -n "$CLIENT_RAW" ]]; then
+        CLIENT_NAME=$(echo "$CLIENT_RAW" | awk '{print $2}')
+        LICENSE_EXP=$(echo "$CLIENT_RAW" | awk '{print $3}')
+        # Fallback jika kolom kosong
+        if [ -z "$CLIENT_NAME" ]; then CLIENT_NAME="Premium User"; fi
+        if [ -z "$LICENSE_EXP" ]; then LICENSE_EXP="Lifetime"; fi
+    else
+        CLIENT_NAME="${RED}Unregistered${NC}"
+        LICENSE_EXP="${RED}Expired${NC}"
+    fi
+
+    # Layout Variables (Blue Borders)
+    C_BORDER=$BLUE
+    C_ACCENT=$RED
     
     TOP="${C_BORDER}┌────────────────────────────────────────────────────┐${NC}"
     MID="${C_BORDER}├────────────────────────────────────────────────────┤${NC}"
     BOT="${C_BORDER}└────────────────────────────────────────────────────┘${NC}"
     V="${C_BORDER}│${NC}"
 
-    # 1. BANNER ASCII
+    # BANNER ASCII
     echo -e "${BLUE}"
     echo -e "███████╗██╗██╗   ██╗ ██████╗██╗██╗     ███████╗"
     echo -e "╚══███╔╝██║██║   ██║██╔════╝██║██║     ╚══███╔╝"
@@ -105,18 +114,24 @@ header() {
     echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
     echo -e "${NC}"
 
-    # 2. INFO BOX (Presisi Tinggi dengan printf)
+    # BOX 1: CLIENT INFO & LICENSE (Kolom Sederhana Baru)
     echo -e "$TOP"
-    printf "$V ${C_LABEL}%-6s${NC} : ${C_TEXT}%-16s${NC} ${C_BORDER}│${NC} ${C_LABEL}%-6s${NC} : ${C_TEXT}%-15s${NC} $V\n" "OS" "Ubuntu LTS" "IP" "$MYIP"
-    printf "$V ${C_LABEL}%-6s${NC} : ${C_TEXT}%-16s${NC} ${C_BORDER}│${NC} ${C_LABEL}%-6s${NC} : ${C_TEXT}%-15s${NC} $V\n" "RAM" "$RAM_USED/$RAM_TOTAL MB" "ISP" "$ISP"
-    printf "$V ${C_LABEL}%-6s${NC} : ${C_TEXT}%-16s${NC} ${C_BORDER}│${NC} ${C_LABEL}%-6s${NC} : ${C_TEXT}%-15s${NC} $V\n" "DATE" "$DATE" "DOMAIN" "$DOMAIN"
+    printf "$V ${WHITE}%-10s${NC} : ${GREEN}%-35s${NC} $V\n" "CLIENT" "$CLIENT_NAME"
+    printf "$V ${WHITE}%-10s${NC} : ${YELLOW}%-35s${NC} $V\n" "EXP IP" "$LICENSE_EXP"
+    echo -e "$BOT"
+    
+    # BOX 2: SYSTEM INFO
+    echo -e "$TOP"
+    printf "$V ${WHITE}%-6s${NC} : ${CYAN}%-16s${NC} ${C_BORDER}│${NC} ${WHITE}%-6s${NC} : ${CYAN}%-15s${NC} $V\n" "OS" "Ubuntu LTS" "IP" "$MYIP"
+    printf "$V ${WHITE}%-6s${NC} : ${CYAN}%-16s${NC} ${C_BORDER}│${NC} ${WHITE}%-6s${NC} : ${CYAN}%-15s${NC} $V\n" "RAM" "$RAM_USED/$RAM_TOTAL MB" "USER" "$TOTAL_USERS Account"
+    printf "$V ${WHITE}%-6s${NC} : ${CYAN}%-16s${NC} ${C_BORDER}│${NC} ${WHITE}%-6s${NC} : ${CYAN}%-15s${NC} $V\n" "DATE" "$DATE" "DOMAIN" "$DOMAIN"
     echo -e "$MID"
     
-    # Status Bar (Warna Logika Manual agar rapi)
+    # Status Logic Color
     if [[ "$S_UDP" == "ON " ]]; then COL_UDP=$GREEN; else COL_UDP=$RED; fi
     if [[ "$S_CRON" == "ON " ]]; then COL_CRON=$GREEN; else COL_CRON=$RED; fi
     
-    printf "$V      ${C_LABEL}%-10s${NC} ${COL_UDP}%-9s${NC} ${C_BORDER}│${NC}      ${C_LABEL}%-10s${NC} ${COL_CRON}%-9s${NC}     $V\n" "ZIVPN UDP:" "$S_UDP" "AUTO XP:" "$S_CRON"
+    printf "$V      ${WHITE}%-10s${NC} ${COL_UDP}%-9s${NC} ${C_BORDER}│${NC}      ${WHITE}%-10s${NC} ${COL_CRON}%-9s${NC}     $V\n" "ZIVPN UDP:" "$S_UDP" "AUTO XP:" "$S_CRON"
     echo -e "$BOT"
 }
 
@@ -124,19 +139,20 @@ header() {
 while true; do
     header
     
-    # 3. MENU BOX (Teks Putih, Nomor Kuning)
-    echo -e "${PURPLE}┌─────────────────────${WHITE}[ MENU ]${PURPLE}───────────────────────┐${NC}"
-    printf "${PURPLE}│${NC} ${YELLOW}[01]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC} ${YELLOW}[06]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC}\n" "Create User" "Change Domain"
-    printf "${PURPLE}│${NC} ${YELLOW}[02]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC} ${YELLOW}[07]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC}\n" "Create Trial" "Force Delete Exp"
-    printf "${PURPLE}│${NC} ${YELLOW}[03]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC} ${YELLOW}[08]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC}\n" "Renew User" "Backup Data"
-    printf "${PURPLE}│${NC} ${YELLOW}[04]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC} ${YELLOW}[09]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC}\n" "Delete User" "Restore Backup"
-    printf "${PURPLE}│${NC} ${YELLOW}[05]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC} ${YELLOW}[10]${NC} ${WHITE}%-18s${NC} ${PURPLE}│${NC}\n" "User List" "Restart Service"
-    echo -e "${PURPLE}└────────────────────────────────────────────────────┘${NC}"
+    # MENU BOX (Blue Border, Red Accents for Number)
+    # Format: [NO] Nama Menu
+    echo -e "${BLUE}┌─────────────────────${WHITE}[ MENU ]${BLUE}───────────────────────┐${NC}"
+    printf "${BLUE}│${NC} ${RED}[01]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[06]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create User" "Change Domain"
+    printf "${BLUE}│${NC} ${RED}[02]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[07]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Create Trial" "Force Delete Exp"
+    printf "${BLUE}│${NC} ${RED}[03]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[08]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Renew User" "Backup Data"
+    printf "${BLUE}│${NC} ${RED}[04]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[09]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "Delete User" "Restore Backup"
+    printf "${BLUE}│${NC} ${RED}[05]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC} ${RED}[10]${NC} ${WHITE}%-18s${NC} ${BLUE}│${NC}\n" "User List" "Restart Service"
+    echo -e "${BLUE}└────────────────────────────────────────────────────┘${NC}"
     
-    # 4. EXIT BOX
-    echo -e "${PURPLE}┌────────────────────────────────────────────────────┐${NC}"
-    echo -e "${PURPLE}│${NC}               ${RED}[x] Exit / Keluar${NC}                    ${PURPLE}│${NC}"
-    echo -e "${PURPLE}└────────────────────────────────────────────────────┘${NC}"
+    # EXIT BOX
+    echo -e "${BLUE}┌────────────────────────────────────────────────────┐${NC}"
+    echo -e "${BLUE}│${NC}               ${RED}[x] Exit / Keluar${NC}                    ${BLUE}│${NC}"
+    echo -e "${BLUE}└────────────────────────────────────────────────────┘${NC}"
     echo -e ""
     echo -e -n " Select Option : "
     read opt
@@ -205,33 +221,29 @@ while true; do
         4|04)
             echo -e ""
             echo -e " ${YELLOW}➤ DELETE USER${NC}"
-            
-            # Interactive Selection Logic
             i=1
             usernames=()
             
-            # Header Tabel Delete
-            echo -e "${PURPLE}┌─────┬──────────────────────┐${NC}"
-            echo -e "${PURPLE}│${NC} NO  ${PURPLE}│${NC} ${WHITE}USERNAME${NC}             ${PURPLE}│${NC}"
-            echo -e "${PURPLE}├─────┼──────────────────────┤${NC}"
+            # Header Tabel Delete (Blue Border)
+            echo -e "${BLUE}┌─────┬──────────────────────┐${NC}"
+            echo -e "${BLUE}│${NC} NO  ${BLUE}│${NC} ${WHITE}USERNAME${NC}             ${BLUE}│${NC}"
+            echo -e "${BLUE}├─────┼──────────────────────┤${NC}"
             
             while read -r user; do
                 usernames+=("$user")
-                printf "${PURPLE}│${NC} %-3s ${PURPLE}│${NC} ${WHITE}%-20s${NC} ${PURPLE}│${NC}\n" "$i" "$user"
+                printf "${BLUE}│${NC} %-3s ${BLUE}│${NC} ${WHITE}%-20s${NC} ${BLUE}│${NC}\n" "$i" "$user"
                 ((i++))
             done < <(jq -r '.auth.config[]' $CONFIG_FILE)
             
-            echo -e "${PURPLE}└─────┴──────────────────────┘${NC}"
+            echo -e "${BLUE}└─────┴──────────────────────┘${NC}"
             
             if [ ${#usernames[@]} -eq 0 ]; then
                 echo -e "${RED}No users found.${NC}"
             else
                 echo -e ""
                 read -p " Select Number (1-${#usernames[@]}): " selection
-                
                 if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#usernames[@]}" ]; then
                     del_pass="${usernames[$((selection-1))]}"
-                    
                     echo -e " Deleting: ${YELLOW}$del_pass${NC} ..."
                     
                     jq --arg pass "$del_pass" '.auth.config -= [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
@@ -249,9 +261,9 @@ while true; do
         5|05)
             echo -e ""
             echo -e " ${YELLOW}➤ USER LIST${NC}"
-            echo -e "${PURPLE}┌─────────────────────┬──────────────────────────┐${NC}"
-            echo -e "${PURPLE}│${NC} ${WHITE}USER${NC}                ${PURPLE}│${NC} ${WHITE}EXPIRED${NC}                  ${PURPLE}│${NC}"
-            echo -e "${PURPLE}├─────────────────────┼──────────────────────────┤${NC}"
+            echo -e "${BLUE}┌─────────────────────┬──────────────────────────┐${NC}"
+            echo -e "${BLUE}│${NC} ${WHITE}USER${NC}                ${BLUE}│${NC} ${WHITE}EXPIRED${NC}                  ${BLUE}│${NC}"
+            echo -e "${BLUE}├─────────────────────┼──────────────────────────┤${NC}"
             for user in $(jq -r '.auth.config[]' $CONFIG_FILE); do
                 exp_ts=$(grep "^${user}:" $DB_FILE | cut -d: -f2)
                 if [[ -n "$exp_ts" && "$exp_ts" =~ ^[0-9]+$ ]]; then
@@ -268,10 +280,9 @@ while true; do
                 else 
                     exp_str="Unlimited"
                 fi
-                # Warna teks isi tabel putih
-                printf "${PURPLE}│${NC} ${WHITE}%-19s${NC} ${PURPLE}│${NC} ${WHITE}%-24s${NC} ${PURPLE}│${NC}\n" "$user" "$exp_str"
+                printf "${BLUE}│${NC} ${WHITE}%-19s${NC} ${BLUE}│${NC} ${WHITE}%-24s${NC} ${BLUE}│${NC}\n" "$user" "$exp_str"
             done
-            echo -e "${PURPLE}└─────────────────────┴──────────────────────────┘${NC}"
+            echo -e "${BLUE}└─────────────────────┴──────────────────────────┘${NC}"
             ;;
 
         6|06)
@@ -288,20 +299,25 @@ while true; do
 
         7|07)
             echo -e ""
-            echo -e "${YELLOW}Checking Expired Users...${NC}"
-            if [ -f "/usr/bin/xp-zivpn" ]; then /usr/bin/xp-zivpn; echo -e "${GREEN}Done.${NC}"; fi
+            if [ -f "/usr/bin/zivbot" ]; then zivbot setup; else echo -e "${RED}Bot Script Missing!${NC}"; fi
             ;;
 
         8|08)
             echo -e ""
-            echo -e "${YELLOW}Creating Backup...${NC}"
+            echo -e " ${YELLOW}Checking Expired Users...${NC}"
+            if [ -f "/usr/bin/xp-zivpn" ]; then /usr/bin/xp-zivpn; echo -e "${GREEN}Done.${NC}"; fi
+            ;;
+
+        9|09)
+            echo -e ""
+            echo -e " ${YELLOW}Creating Backup...${NC}"
             if [ -f "/usr/bin/backup-zivpn" ]; then 
                 /usr/bin/backup-zivpn
                 echo -e "${GREEN}Backup sent to Telegram!${NC}"
             fi
             ;;
 
-        9|09)
+        10)
             echo -e ""
             echo -e " ${YELLOW}➤ RESTORE BACKUP${NC}"
             echo -e " ${WHITE}Paste Direct Link (ZIP format)${NC}"
@@ -325,7 +341,7 @@ while true; do
             rm -rf /root/restore
             ;;
 
-        10)
+        11)
             systemctl restart $SERVICE_NAME
             echo -e "${GREEN}Service Restarted.${NC}"
             ;;
