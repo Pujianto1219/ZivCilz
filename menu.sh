@@ -1,6 +1,9 @@
 #!/bin/bash
-# Zivpn Management Menu (Ultimate Edition)
+# Zivpn Management Menu (Ultimate Edition - Fixed Timezone)
 # Repo: https://github.com/Pujianto1219/ZivCilz
+
+# SET TIMEZONE ASIA/JAKARTA (WIB)
+timedatectl set-timezone Asia/Jakarta
 
 # Warna
 RED='\033[0;31m'
@@ -43,25 +46,28 @@ header() {
     echo -e "${YELLOW}====================================================${NC}"
     
     # System Info Calculation
-    # RAM
     RAM_USED=$(free -m | grep Mem | awk '{print $3}')
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
-    # CPU
     CPU_MODEL=$(lscpu | grep "Model name" | cut -d: -f2 | sed 's/^[ \t]*//' | head -1 | awk '{print $1,$2,$3}')
-    # IP & Region (Menggunakan API lightweight)
-    RAW_JSON=$(curl -s ipinfo.io)
-    MYIP=$(echo $RAW_JSON | jq -r '.ip')
-    REGION=$(echo $RAW_JSON | jq -r '.region')
-    ISP=$(echo $RAW_JSON | jq -r '.org')
+    
+    # Ambil Data IP & Region
+    MYIP=$(curl -sS ipinfo.io/ip)
+    ISP=$(curl -sS ipinfo.io/org)
+    CITY=$(curl -sS ipinfo.io/city)
     DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
+    
+    # Waktu Server
+    TIME=$(date +"%H:%M:%S")
+    DATE=$(date +"%d-%b-%Y")
 
     echo -e " OS      : $(cat /etc/os-release | grep -w PRETTY_NAME | head -n1 | sed 's/PRETTY_NAME//g' | sed 's/=//g' | sed 's/"//g')"
     echo -e " CPU     : $CPU_MODEL"
     echo -e " RAM     : ${GREEN}${RAM_USED}MB${NC} / ${GREEN}${RAM_TOTAL}MB${NC}"
     echo -e " ISP     : $ISP"
-    echo -e " Region  : $REGION"
+    echo -e " Location: $CITY (Asia/Jakarta)"
     echo -e " IP VPS  : $MYIP"
     echo -e " Domain  : ${GREEN}$DOMAIN${NC}"
+    echo -e " Time    : $TIME WIB | $DATE"
     
     # Cek Status Service
     if systemctl is-active --quiet $SERVICE_NAME; then
@@ -76,7 +82,7 @@ header() {
 while true; do
     header
     echo -e " [1]  Create User (Buat Akun Reguler)"
-    echo -e " [2]  ${CYAN}Create Trial (Akun Sementara/Menit)${NC}"
+    echo -e " [2]  ${CYAN}Create Trial (Akun Menit/Jam)${NC}"
     echo -e " [3]  Delete User (Hapus Akun)"
     echo -e " [4]  Renew User (Perpanjang Akun)"
     echo -e " [5]  User List (Lihat Daftar User)"
@@ -179,25 +185,26 @@ while true; do
         5) # User List
             echo -e ""
             echo -e "${CYAN}--- USER LIST ---${NC}"
-            echo -e "User             | Expired"
+            echo -e "User             | Status/Expired"
             echo -e "-----------------------------------"
             for user in $(jq -r '.auth.config[]' $CONFIG_FILE); do
                 exp_timestamp=$(grep "^${user}:" $DB_FILE | cut -d: -f2)
                 if [[ -n "$exp_timestamp" && "$exp_timestamp" =~ ^[0-9]+$ ]]; then
-                    # Cek apakah expired hari ini/besok atau jam (untuk trial)
                     if [ "$exp_timestamp" -gt "$(date +%s)" ]; then
-                         # Tampilkan Jam Menit jika kurang dari 24 jam (Trial)
+                         # Hitung sisa waktu
                          diff=$(($exp_timestamp - $(date +%s)))
                          if [ $diff -lt 86400 ]; then
+                             # Kurang dari 24 jam (Tampil Jam)
                              exp_date_str=$(date -d "@$exp_timestamp" +"%H:%M (%d-%b)")
                          else
+                             # Lebih dari 24 jam (Tampil Tanggal)
                              exp_date_str=$(date -d "@$exp_timestamp" +"%Y-%m-%d")
                          fi
                     else
-                         exp_date_str="${RED}EXPIRED${NC}"
+                         exp_date_str="EXPIRED"
                     fi
                 else
-                    exp_date_str="Permanent"
+                    exp_date_str="Unlimited"
                 fi
                 printf "%-16s | %s\n" "$user" "$exp_date_str"
             done
