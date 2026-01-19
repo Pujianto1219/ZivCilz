@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn UDP Installer - Auto Delete Installer
+# Zivpn UDP Installer - Auto Start Menu
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # Warna
@@ -20,11 +20,11 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (AUTO CLEANUP)    "
+echo -e "   ZIVPN UDP INSTALLER (AUTO MENU LOGIN) "
 echo -e "${CYAN}=========================================${NC}"
 
 # 2. IP Validation
-echo -e "${YELLOW}[1/10] Validating IP Address...${NC}"
+echo -e "${YELLOW}[1/11] Validating IP Address...${NC}"
 MYIP=$(wget -qO- ipinfo.io/ip || curl -s ifconfig.me)
 echo -e "Your IP: ${GREEN}$MYIP${NC}"
 
@@ -33,13 +33,12 @@ if wget -qO- "$PERMISSION_URL" | grep -qw "$MYIP"; then
     sleep 1
 else
     echo -e "${RED}[ERROR] IP $MYIP is not registered!${NC}"
-    # Hapus file ini sebelum exit
     rm -f "$0"
     exit 1
 fi
 
-# 3. Low-Spec Optimization (Auto Swap)
-echo -e "${YELLOW}[2/10] Optimizing for Low-Spec VPS...${NC}"
+# 3. Low-Spec Optimization
+echo -e "${YELLOW}[2/11] Optimizing for Low-Spec VPS...${NC}"
 RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
 if [ "$RAM_TOTAL" -lt 2000 ]; then
     echo -e "${CYAN}[info] RAM detected: ${RAM_TOTAL}MB. Checking Swap...${NC}"
@@ -59,12 +58,13 @@ else
 fi
 
 # 4. Install Dependencies
-echo -e "${YELLOW}[3/10] Installing Dependencies...${NC}"
+echo -e "${YELLOW}[3/11] Installing Dependencies...${NC}"
 apt-get update -y
 apt-get install wget openssl dnsutils iptables jq zip cron -y >/dev/null 2>&1
 
-# 5. Domain Validation (Manual Input)
-echo -e "${YELLOW}[4/10] Domain Configuration${NC}"
+# 5. Domain Configuration (Manual Input + Save)
+echo -e "${YELLOW}[4/11] Domain Configuration${NC}"
+mkdir -p /etc/zivpn
 echo -e "Pastikan domain diarahkan ke IP: ${GREEN}$MYIP${NC}"
 
 while true; do
@@ -76,15 +76,15 @@ while true; do
         continue
     fi
     
-    # Langsung terima domain (No Validasi IP agar cepat)
+    # Simpan domain
+    echo "$domain_input" > /etc/zivpn/domain
     echo -e "${GREEN}[OK] Domain set to: $domain_input${NC}"
     break
 done
 
 # 6. Setup Binary
-echo -e "${YELLOW}[5/10] Downloading Resources...${NC}"
+echo -e "${YELLOW}[5/11] Downloading Resources...${NC}"
 systemctl stop zivpn.service >/dev/null 2>&1
-mkdir -p /etc/zivpn
 
 wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
 chmod +x /usr/local/bin/zivpn
@@ -93,7 +93,7 @@ chmod +x /usr/local/bin/zivpn
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$domain_input" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
 
 # 7. Kernel Tuning
-echo -e "${YELLOW}[6/10] Tuning Network Kernel...${NC}"
+echo -e "${YELLOW}[6/11] Tuning Network Kernel...${NC}"
 cat <<EOF >> /etc/sysctl.conf
 net.core.rmem_max=16777216
 net.core.wmem_max=16777216
@@ -104,7 +104,7 @@ EOF
 sysctl -p >/dev/null 2>&1
 
 # 8. AUTO PASSWORD
-echo -e "${YELLOW}[7/10] Generating Config...${NC}"
+echo -e "${YELLOW}[7/11] Generating Config...${NC}"
 RANDOM_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
 
 cat <<EOF > /etc/zivpn/config.json
@@ -122,7 +122,7 @@ EOF
 touch /etc/zivpn/akun.db
 
 # 9. Create Service & Firewall
-echo -e "${YELLOW}[8/10] Finalizing Service...${NC}"
+echo -e "${YELLOW}[8/11] Finalizing Service...${NC}"
 cat <<EOF > /etc/systemd/system/zivpn.service
 [Unit]
 Description=zivpn VPN Server
@@ -153,9 +153,9 @@ if [ -n "$DEFAULT_IFACE" ]; then
 fi
 
 # 10. SETUP CRON, XP, BACKUP & MENU
-echo -e "${YELLOW}[9/10] Setting up Auto-Manage Scripts...${NC}"
+echo -e "${YELLOW}[9/11] Setting up Auto-Manage Scripts...${NC}"
 
-# A. Script XP (Auto Delete)
+# A. Script XP
 cat <<'EOF' > /usr/bin/xp-zivpn
 #!/bin/bash
 CONFIG="/etc/zivpn/config.json"
@@ -184,40 +184,48 @@ DATE=$(date +"%Y-%m-%d")
 mkdir -p /root/backup
 cp /etc/zivpn/config.json /root/backup/
 cp /etc/zivpn/akun.db /root/backup/
+DOMAIN=$(cat /etc/zivpn/domain 2>/dev/null || echo "vps")
 cd /root/
-zip -r backup-zivpn-$DATE.zip backup > /dev/null 2>&1
+zip -r backup-${DOMAIN}-${DATE}.zip backup > /dev/null 2>&1
 rm -rf /root/backup
 EOF
 chmod +x /usr/bin/backup-zivpn
 
-# C. Pasang Cronjob
+# C. Cronjob
 sed -i "/xp-zivpn/d" /etc/crontab
 sed -i "/backup-zivpn/d" /etc/crontab
 echo "0 0 * * * root /usr/bin/xp-zivpn" >> /etc/crontab
 echo "0 5 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
 service cron restart
 
-# D. Download Menu Permanen
-echo -e "${YELLOW}[+] Installing Menu...${NC}"
+# D. Menu & Auto-Start Logic
+echo -e "${YELLOW}[10/11] Installing Menu & Auto-Start...${NC}"
 wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
 chmod +x /usr/bin/menu
 
-# ==========================================
-# FINAL CLEANUP & AUTO DELETE INSTALLER
-# ==========================================
+# --- AUTO START MENU CONFIGURATION ---
+# 1. Hilangkan pesan welcome bawaan ubuntu (System load, dll)
+touch /root/.hushlogin
+
+# 2. Pasang menu otomatis di .bashrc jika belum ada
+if ! grep -q "menu" /root/.bashrc; then
+    echo "if [ -t 0 ]; then menu; fi" >> /root/.bashrc
+fi
+# -------------------------------------
+
+# Final Cleanup
 rm -f zi.* 2>/dev/null
-# Menghapus file setup.sh ini sendiri
 rm -f "$0" 
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "      INSTALASI SELESAI (CLEAN MODE)     "
+echo -e "      INSTALASI SELESAI (AUTO-LOGIN)     "
 echo -e "${CYAN}=========================================${NC}"
 echo -e " Domain     : $domain_input"
 echo -e " Auto Pass  : $RANDOM_PASS"
 echo -e " Port       : 5667 (UDP)"
 echo -e "${CYAN}=========================================${NC}"
-echo -e " Script installer telah dihapus otomatis."
-echo -e " Membuka Menu..."
-sleep 2
+echo -e " Script ini akan terhapus otomatis."
+echo -e " VPS akan langsung masuk ke MENU saat Login."
+sleep 3
 clear
 menu
