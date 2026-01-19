@@ -1,8 +1,8 @@
 #!/bin/bash
-# Zivpn UDP Installer - Ultimate (Safe + Bot Integrated)
+# Zivpn UDP Installer - Final (Auto-Check IP Cron)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
-# 1. SET TIMEZONE ASIA/JAKARTA
+# 1. SET TIMEZONE
 timedatectl set-timezone Asia/Jakarta
 
 # Warna
@@ -23,11 +23,11 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (ULTIMATE BOT)    "
+echo -e "   ZIVPN UDP INSTALLER (AUTO IP CHECK)   "
 echo -e "${CYAN}=========================================${NC}"
 
-# 3. IP Validation
-echo -e "${YELLOW}[1/11] Validating IP Address...${NC}"
+# 3. IP Validation (Install Gatekeeper)
+echo -e "${YELLOW}[1/12] Validating IP Address...${NC}"
 MYIP=$(wget -qO- ipinfo.io/ip || curl -s ifconfig.me)
 echo -e "Your IP: ${GREEN}$MYIP${NC}"
 
@@ -41,39 +41,33 @@ else
 fi
 
 # 4. Low-Spec Optimization
-echo -e "${YELLOW}[2/11] Optimizing for Low-Spec VPS...${NC}"
+echo -e "${YELLOW}[2/12] Optimizing for Low-Spec VPS...${NC}"
 RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
 if [ "$RAM_TOTAL" -lt 2000 ]; then
     if [ $(swapon -s | wc -l) -lt 2 ]; then
-        echo -e "${GREEN}[+] Creating 1GB Swap File...${NC}"
         fallocate -l 1G /swapfile
         chmod 600 /swapfile
         mkswap /swapfile >/dev/null 2>&1
         swapon /swapfile
         echo '/swapfile none swap sw 0 0' >> /etc/fstab
-    else
-        echo -e "${CYAN}[info] Swap already exists.${NC}"
     fi
-else
-    echo -e "${CYAN}[info] RAM is sufficient.${NC}"
 fi
 
-# 5. Install Dependencies (Always Update)
-echo -e "${YELLOW}[3/11] Installing Dependencies...${NC}"
+# 5. Install Dependencies
+echo -e "${YELLOW}[3/12] Installing Dependencies...${NC}"
 apt-get update -y
 apt-get install wget openssl dnsutils iptables jq zip cron curl -y >/dev/null 2>&1
 
-# 6. Domain Configuration (SMART CHECK)
-echo -e "${YELLOW}[4/11] Domain Configuration${NC}"
+# 6. Domain Configuration
+echo -e "${YELLOW}[4/12] Domain Configuration${NC}"
 mkdir -p /etc/zivpn
 
-# Cek apakah sudah ada domain tersimpan
+# Cek apakah domain sudah ada (Mode Update)
 if [ -f "/etc/zivpn/domain" ]; then
     OLD_DOMAIN=$(cat /etc/zivpn/domain)
     echo -e "Domain terdeteksi: ${GREEN}$OLD_DOMAIN${NC}"
     echo -e "Gunakan domain lama? (y/n)"
     read -p "Pilih: " keep_domain
-    
     if [[ "$keep_domain" == "y" || "$keep_domain" == "Y" ]]; then
         domain_input=$OLD_DOMAIN
     else
@@ -90,20 +84,19 @@ else
         break
     done
 fi
-echo -e "${GREEN}[OK] Domain set to: $domain_input${NC}"
 
-# 7. Setup Binary (Always Update Binary)
-echo -e "${YELLOW}[5/11] Updating Core Binary...${NC}"
+# 7. Setup Binary
+echo -e "${YELLOW}[5/12] Updating Core Binary...${NC}"
 systemctl stop zivpn.service >/dev/null 2>&1
 
 wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
 chmod +x /usr/local/bin/zivpn
 
-# Generate SSL (Renew/Create)
+# Generate SSL
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$domain_input" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
 
 # 8. Kernel Tuning
-echo -e "${YELLOW}[6/11] Tuning Network Kernel...${NC}"
+echo -e "${YELLOW}[6/12] Tuning Network Kernel...${NC}"
 if ! grep -q "net.core.rmem_max" /etc/sysctl.conf; then
 cat <<EOF >> /etc/sysctl.conf
 net.core.rmem_max=16777216
@@ -115,14 +108,9 @@ EOF
 sysctl -p >/dev/null 2>&1
 fi
 
-# 9. AUTO PASSWORD (SAFE MODE)
-echo -e "${YELLOW}[7/11] Checking Config...${NC}"
-
-# Cek apakah config sudah ada?
-if [ -f "/etc/zivpn/config.json" ]; then
-    echo -e "${GREEN}[SKIP] Config sudah ada. User lama AMAN.${NC}"
-else
-    echo -e "${CYAN}[NEW] Membuat Config Baru...${NC}"
+# 9. Config JSON
+echo -e "${YELLOW}[7/12] Checking Config...${NC}"
+if [ ! -f "/etc/zivpn/config.json" ]; then
     RANDOM_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
 cat <<EOF > /etc/zivpn/config.json
 {
@@ -140,7 +128,7 @@ fi
 touch /etc/zivpn/akun.db
 
 # 10. Service & Firewall
-echo -e "${YELLOW}[8/11] Finalizing Service...${NC}"
+echo -e "${YELLOW}[8/12] Finalizing Service...${NC}"
 cat <<EOF > /etc/systemd/system/zivpn.service
 [Unit]
 Description=zivpn VPN Server
@@ -171,10 +159,10 @@ if [ -n "$DEFAULT_IFACE" ]; then
     fi
 fi
 
-# 11. SETUP CRON, XP, BACKUP & MENU
-echo -e "${YELLOW}[9/11] Updating Auto-Manage Scripts...${NC}"
+# 11. AUTOMATION SCRIPTS
+echo -e "${YELLOW}[9/12] Installing Auto-Manage Scripts...${NC}"
 
-# A. Script XP
+# A. Script XP (User Expired)
 cat <<'EOF' > /usr/bin/xp-zivpn
 #!/bin/bash
 CONFIG="/etc/zivpn/config.json"
@@ -189,9 +177,7 @@ while read -r line; do
     if [ "$NOW" -ge "$E" ]; then
         jq --arg u "$U" '.auth.config -= [$u]' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
         grep -v "^$U:" "$DB" > "${DB}.tmp" && mv "${DB}.tmp" "$DB"
-        if [ -f "/usr/bin/zivbot" ]; then
-            /usr/bin/zivbot expired "$U" &
-        fi
+        if [ -f "/usr/bin/zivbot" ]; then /usr/bin/zivbot expired "$U" & fi
         RESTART=1
     fi
 done < "$DB"
@@ -206,32 +192,70 @@ DATE=$(date +"%Y-%m-%d-%H-%M")
 DOMAIN=$(cat /etc/zivpn/domain 2>/dev/null || echo "vps")
 BACKUP_DIR="/root/backup"
 ZIP_FILE="${BACKUP_DIR}/backup-${DOMAIN}-${DATE}.zip"
-
 mkdir -p $BACKUP_DIR
 cp /etc/zivpn/config.json $BACKUP_DIR/
 cp /etc/zivpn/akun.db $BACKUP_DIR/
-
 cd /root/
 zip -r $ZIP_FILE backup > /dev/null 2>&1
-
-if [ -f "/usr/bin/zivbot" ]; then
-    /usr/bin/zivbot backup "$ZIP_FILE"
-fi
-
+if [ -f "/usr/bin/zivbot" ]; then /usr/bin/zivbot backup "$ZIP_FILE"; fi
 rm -rf $BACKUP_DIR
 rm -f $ZIP_FILE
 EOF
 chmod +x /usr/bin/backup-zivpn
 
-# C. Cronjob
+# C. SCRIPT BARU: AUTO IP CHECKER
+# ==========================================
+cat <<'EOF' > /usr/bin/zivpn-ipcheck
+#!/bin/bash
+# Auto IP Checker for Zivpn
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+MYIP=$(wget -qO- ipinfo.io/ip)
+LOG_FILE="/var/log/zivpn-ipcheck.log"
+
+# Ambil Data
+RAW_DATA=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
+TODAY=$(date +%Y-%m-%d)
+
+if [[ -n "$RAW_DATA" ]]; then
+    EXP_DATE=$(echo "$RAW_DATA" | awk '{print $3}')
+    if [[ "$EXP_DATE" > "$TODAY" || "$EXP_DATE" == "$TODAY" ]]; then
+        # IP VALID
+        # Pastikan service jalan (Auto-Heal)
+        if ! systemctl is-active --quiet zivpn.service; then
+            systemctl start zivpn.service
+            echo "$(date): Service Restarted (IP Valid)" >> $LOG_FILE
+        fi
+    else
+        # IP EXPIRED
+        echo "$(date): IP Expired on $EXP_DATE. Stopping Service." >> $LOG_FILE
+        systemctl stop zivpn.service
+    fi
+else
+    # IP TIDAK TERDAFTAR
+    echo "$(date): IP Not Registered. Stopping Service." >> $LOG_FILE
+    systemctl stop zivpn.service
+fi
+EOF
+chmod +x /usr/bin/zivpn-ipcheck
+# ==========================================
+
+# 12. SETUP CRONJOBS
+echo -e "${YELLOW}[10/12] Registering Cronjobs...${NC}"
 sed -i "/xp-zivpn/d" /etc/crontab
 sed -i "/backup-zivpn/d" /etc/crontab
+sed -i "/zivpn-ipcheck/d" /etc/crontab
+
+# 1. Cek User Expired (Per Menit - untuk Trial)
 echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
+# 2. Cek Validitas IP VPS (Setiap jam 12 Malam)
+echo "0 0 * * * root /usr/bin/zivpn-ipcheck" >> /etc/crontab
+# 3. Auto Backup (Jam 5 Pagi)
 echo "0 5 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
+
 service cron restart
 
-# D. Menu, Bot & Auto-Start
-echo -e "${YELLOW}[10/11] Updating Menu & Bot...${NC}"
+# 13. Download Scripts
+echo -e "${YELLOW}[11/12] Downloading Menu & Bot...${NC}"
 wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
 chmod +x /usr/bin/menu
 
@@ -248,11 +272,10 @@ rm -f zi.* 2>/dev/null
 rm -f "$0" 
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   UPDATE/INSTALL SELESAI (DATA AMAN)    "
+echo -e "   UPDATE/INSTALL SELESAI (IP PROTECTED) "
 echo -e "${CYAN}=========================================${NC}"
 echo -e " Domain     : $domain_input"
-echo -e " Timezone   : Asia/Jakarta"
-echo -e " Status     : Config & User Lama Tersimpan"
+echo -e " IP Check   : Active (Daily Cron)"
 echo -e "${CYAN}=========================================${NC}"
 sleep 2
 clear
