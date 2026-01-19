@@ -1,6 +1,6 @@
 #!/bin/bash
-# Zivpn UDP Installer - Full Silent Edition
-# Features: IP Valid, Auto Swap, Auto Menu, Auto Random Pass, Auto IP-Domain
+# Zivpn UDP Installer - Silent Password Edition
+# Features: IP/Domain Valid, Auto Swap, Menu Manager, Auto Random Pass
 
 # Warna
 RED='\033[0;31m'
@@ -20,7 +20,7 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (FULL SILENT)     "
+echo -e "   ZIVPN UDP INSTALLER (AUTO PASSWORD)   "
 echo -e "${CYAN}=========================================${NC}"
 
 # 2. IP Validation
@@ -62,11 +62,31 @@ echo -e "${YELLOW}[3/8] Installing Dependencies...${NC}"
 apt-get update -y
 apt-get install wget openssl dnsutils iptables jq -y >/dev/null 2>&1
 
-# 5. Domain Configuration (AUTO SET TO IP)
-# Kita hilangkan input manual, dan gunakan IP VPS sebagai domain SSL
-echo -e "${YELLOW}[4/8] Setting up SSL Domain...${NC}"
-domain_input="$MYIP"
-echo -e "Using VPS IP as Domain: ${GREEN}$domain_input${NC}"
+# 5. Domain Validation
+echo -e "${YELLOW}[4/8] Domain Configuration${NC}"
+echo -e "Pastikan domain diarahkan ke IP: ${GREEN}$MYIP${NC}"
+
+while true; do
+    echo -e -n "Masukkan Domain: "
+    read domain_input
+    
+    if [ -z "$domain_input" ]; then
+        echo -e "${RED}[!] Domain tidak boleh kosong.${NC}"
+        continue
+    fi
+
+    DOMAIN_IP=$(dig +short "$domain_input" | grep -v '[a-z]' | head -1)
+
+    if [ -z "$DOMAIN_IP" ]; then
+        echo -e "${RED}[!] Domain tidak valid/belum propagasi.${NC}"
+    elif [ "$DOMAIN_IP" == "$MYIP" ]; then
+        echo -e "${GREEN}[OK] Domain Verified.${NC}"
+        break
+    else
+        echo -e "${RED}[!] Domain mengarah ke $DOMAIN_IP (Bukan $MYIP)${NC}"
+        echo -e "${YELLOW}[Tip] Matikan Cloudflare Proxy (Orange Cloud).${NC}"
+    fi
+done
 
 # 6. Setup Binary
 echo -e "${YELLOW}[5/8] Downloading Resources...${NC}"
@@ -76,7 +96,7 @@ mkdir -p /etc/zivpn
 wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
 chmod +x /usr/local/bin/zivpn
 
-# Generate SSL (Uses IP as CN)
+# Generate SSL
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$domain_input" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
 
 # 7. Kernel Tuning
@@ -90,9 +110,10 @@ fs.file-max=65535
 EOF
 sysctl -p >/dev/null 2>&1
 
-# 8. AUTO PASSWORD
+# 8. AUTO PASSWORD (Modified)
 echo -e "${YELLOW}[7/8] Generating Initialization Config...${NC}"
-# Membuat password acak 8 karakter
+# Membuat password acak 8 karakter agar service bisa jalan
+# User tidak perlu input apa-apa di sini
 RANDOM_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
 
 # Create Config
@@ -150,10 +171,10 @@ rm zi.* 2>/dev/null
 rm -- "$0" 2>/dev/null
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "      INSTALASI SELESAI (SILENT MODE)    "
+echo -e "      INSTALASI SELESAI (OPTIMIZED)      "
 echo -e "${CYAN}=========================================${NC}"
-echo -e " SSL Host   : $domain_input (IP)"
-echo -e " Auto Pass  : $RANDOM_PASS"
+echo -e " Domain     : $domain_input"
+echo -e " Auto Pass  : $RANDOM_PASS (Default)"
 echo -e " Port       : 5667 (UDP)"
 echo -e "${CYAN}=========================================${NC}"
 echo -e " Ketik command '${YELLOW}menu${NC}' untuk kelola user"
