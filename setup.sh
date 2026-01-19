@@ -1,127 +1,85 @@
 #!/bin/bash
-# Zivpn UDP Installer - Low Spec Optimized
-# Features: IP Permission, Domain Validation, Auto Swap, Kernel Tuning
+# Script Auto Installer ZivCilz (Permanent Menu Edition)
+# Repo: https://github.com/Pujianto1219/ZivCilz
 
-# Warna
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
-NC='\033[0m'
+green='\e[32m'
+red='\e[31m'
+yellow='\e[33m'
+blue='\e[34m'
+nc='\e[0m'
 
-# URL Database IP
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
-
-# 1. Cek Root
-if [[ $EUID -ne 0 ]]; then
-   echo -e "${RED}Script ini harus dijalankan sebagai root!${NC}" 
-   exit 1
-fi
-
-clear
-echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (LITE EDITION)    "
-echo -e "${CYAN}=========================================${NC}"
-
-# 2. IP Validation
-echo -e "${YELLOW}[1/8] Validating IP Address...${NC}"
-MYIP=$(wget -qO- ipinfo.io/ip || curl -s ifconfig.me)
-echo -e "Your IP: ${GREEN}$MYIP${NC}"
-
-if wget -qO- "$PERMISSION_URL" | grep -qw "$MYIP"; then
-    echo -e "${GREEN}[SUCCESS] IP Verified!${NC}"
-    sleep 1
-else
-    echo -e "${RED}[ERROR] IP $MYIP is not registered!${NC}"
-    rm -- "$0" 2>/dev/null
+if [ "${EUID}" -ne 0 ]; then
+    echo -e "${red}Run as root!${nc}"
     exit 1
 fi
 
-# 3. Low-Spec Optimization (Auto Swap)
-echo -e "${YELLOW}[2/8] Optimizing for Low-Spec VPS...${NC}"
-RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
-if [ "$RAM_TOTAL" -lt 2000 ]; then
-    echo -e "${CYAN}[info] RAM detected: ${RAM_TOTAL}MB. Checking Swap...${NC}"
-    if [ $(swapon -s | wc -l) -lt 2 ]; then
-        echo -e "${GREEN}[+] Creating 1GB Swap File...${NC}"
-        fallocate -l 1G /swapfile
-        chmod 600 /swapfile
-        mkswap /swapfile >/dev/null 2>&1
-        swapon /swapfile
-        echo '/swapfile none swap sw 0 0' >> /etc/fstab
-        echo -e "${GREEN}[+] Swap Created!${NC}"
-    else
-        echo -e "${CYAN}[info] Swap already exists.${NC}"
-    fi
+clear
+echo -e "${yellow}===================================================${nc}"
+echo -e "${green}   AUTOSCRIPT ZIVCILZ (MODE: PASSWORDS)          ${nc}"
+echo -e "${yellow}===================================================${nc}"
+
+# 1. CEK IP & DEPENDENCIES
+echo -e "${blue}[INFO] Checking IP Validation...${nc}"
+MYIP=$(curl -sS ipv4.icanhazip.com)
+[ -z "$MYIP" ] && MYIP=$(curl -sS ifconfig.me)
+
+# URL IP Database Pujianto1219
+IP_DB="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+
+if wget -qO- "$IP_DB" | tr -d '\r' | grep -w "$MYIP" > /dev/null; then
+    echo -e "${green}✅ IP Terdaftar! Akses Diizinkan.${nc}"
 else
-    echo -e "${CYAN}[info] RAM is sufficient (>2GB). Skipping Swap.${NC}"
+    echo -e "${red}❌ IP $MYIP TIDAK TERDAFTAR DI DATABASE!${nc}"
+    rm "$0" 2>/dev/null
+    exit 1
 fi
 
-# 4. Install Dependencies (Ditambah JQ untuk Menu)
-echo -e "${YELLOW}[3/8] Installing Dependencies...${NC}"
-apt-get update -y
-# Tambahan: paket 'jq' wajib diinstall untuk menu json
-apt-get install wget openssl dnsutils iptables jq -y >/dev/null 2>&1
+echo -e "${blue}[INFO] Installing Dependencies...${nc}"
+apt-get update
+apt-get install -y --no-install-recommends wget curl git zip unzip tar net-tools systemd dnsutils vnstat nginx socat cron gnupg2 ca-certificates lsb-release jq iptables-persistent
 
-# 5. Domain Validation
-echo -e "${YELLOW}[4/8] Domain Configuration${NC}"
-echo -e "Pastikan domain diarahkan ke IP: ${GREEN}$MYIP${NC}"
+# 2. OPTIMASI VPS
+if ! grep -q "net.core.default_qdisc=fq" /etc/sysctl.conf; then
+    echo "net.core.default_qdisc=fq" >> /etc/sysctl.conf
+    echo "net.ipv4.tcp_congestion_control=bbr" >> /etc/sysctl.conf
+    sysctl -p
+fi
 
+# 3. DOMAIN SETUP
+echo -e "${yellow}===================================================${nc}"
+echo -e "Masukkan Domain (Pastikan A Record mengarah ke $MYIP)"
 while true; do
-    echo -e -n "Masukkan Domain: "
-    read domain_input
+    read -p "Domain: " domain
+    [ -z "$domain" ] && continue
     
-    if [ -z "$domain_input" ]; then
-        echo -e "${RED}[!] Domain tidak boleh kosong.${NC}"
-        continue
-    fi
-
-    DOMAIN_IP=$(dig +short "$domain_input" | grep -v '[a-z]' | head -1)
-
-    if [ -z "$DOMAIN_IP" ]; then
-        echo -e "${RED}[!] Domain tidak valid/belum propagasi.${NC}"
-    elif [ "$DOMAIN_IP" == "$MYIP" ]; then
-        echo -e "${GREEN}[OK] Domain Verified.${NC}"
+    DOMAIN_IP=$(dig +short "$domain" | head -n 1)
+    
+    if [[ "$DOMAIN_IP" == "$MYIP" ]]; then
+        echo "$domain" > /root/domain
+        mkdir -p /etc/zivpn
+        echo "$domain" > /etc/zivpn/domain
+        echo -e "${green}Domain Valid!${nc}"
         break
     else
-        echo -e "${RED}[!] Domain mengarah ke $DOMAIN_IP (Bukan $MYIP)${NC}"
-        echo -e "${YELLOW}[Tip] Matikan Cloudflare Proxy (Orange Cloud).${NC}"
+        echo -e "${red}IP Domain ($DOMAIN_IP) tidak sama dengan IP VPS ($MYIP)!${nc}"
+        echo -e "${yellow}Matikan Proxy Cloudflare (DNS Only) jika error berlanjut.${nc}"
     fi
 done
 
-# 6. Stop Old Service & Download Binary
-echo -e "${YELLOW}[5/8] Downloading Resources...${NC}"
-systemctl stop zivpn.service >/dev/null 2>&1
-mkdir -p /etc/zivpn
+# 4. SSL SETUP
+echo -e "${blue}[INFO] Setup SSL / Acme.sh...${nc}"
+systemctl stop nginx
+mkdir -p /root/.acme.sh
+curl https://acme-install.netlify.app/acme.sh -o /root/.acme.sh/acme.sh
+chmod +x /root/.acme.sh/acme.sh
+/root/.acme.sh/acme.sh --upgrade --auto-upgrade
+/root/.acme.sh/acme.sh --set-default-ca --server letsencrypt
+/root/.acme.sh/acme.sh --issue -d "$domain" --standalone -k ec-256 --force
+/root/.acme.sh/acme.sh --installcert -d "$domain" --fullchainpath /etc/zivpn/zivpn.crt --keypath /etc/zivpn/zivpn.key --ecc
 
-wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
-chmod +x /usr/local/bin/zivpn
-
-# Generate SSL
-openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$domain_input" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
-
-# 7. Kernel Tuning
-echo -e "${YELLOW}[6/8] Tuning Network Kernel...${NC}"
-cat <<EOF >> /etc/sysctl.conf
-net.core.rmem_max=16777216
-net.core.wmem_max=16777216
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
-fs.file-max=65535
-EOF
-sysctl -p >/dev/null 2>&1
-
-# 8. Input Password
-echo -e "${YELLOW}[7/8] Password Setup${NC}"
-while true; do
-    echo -e -n "Masukkan password (cth: pass1,pass2): "
-    read input_config
-    if [ -n "$input_config" ]; then break; fi
-done
-formatted_passwords=$(echo "$input_config" | sed 's/,/","/g')
-
-# Create Config
-cat <<EOF > /etc/zivpn/config.json
+# 5. CONFIG JSON
+echo -e "${blue}[INFO] Writing Config JSON...${nc}"
+cat > /etc/zivpn/config.json <<EOF
 {
   "listen": ":5667",
   "cert": "/etc/zivpn/zivpn.crt",
@@ -129,23 +87,37 @@ cat <<EOF > /etc/zivpn/config.json
   "obfs": "zivpn",
   "auth": {
     "mode": "passwords",
-    "config": ["$formatted_passwords"]
+    "config": ["zi"]
   }
 }
 EOF
+chmod 644 /etc/zivpn/config.json
+touch /etc/zivpn/akun.db
 
-# 9. Create Service & Firewall
-echo -e "${YELLOW}[8/8] Finalizing...${NC}"
-cat <<EOF > /etc/systemd/system/zivpn.service
+# 6. UDP CORE INSTALLATION
+echo -e "${blue}[INFO] Downloading Core Binary...${nc}"
+ARCH=$(uname -m)
+if [[ "$ARCH" == "x86_64" ]]; then
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64"
+elif [[ "$ARCH" == "aarch64" ]]; then
+    URL_CORE="https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-arm64"
+else
+    echo -e "${red}Arsitektur CPU tidak didukung!${nc}"; exit 1
+fi
+
+wget -q -O /usr/bin/udp-zivpn "$URL_CORE"
+chmod +x /usr/bin/udp-zivpn
+
+cat > /etc/systemd/system/udp-zivpn.service <<EOF
 [Unit]
-Description=zivpn VPN Server
+Description=UDP ZivCilz Core
 After=network.target
 
 [Service]
-Type=simple
 User=root
+Type=simple
 WorkingDirectory=/etc/zivpn
-ExecStart=/usr/local/bin/zivpn server -c /etc/zivpn/config.json
+ExecStart=/usr/bin/udp-zivpn server -c /etc/zivpn/config.json
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
@@ -155,33 +127,88 @@ Environment=ZIVPN_LOG_LEVEL=info
 WantedBy=multi-user.target
 EOF
 
-systemctl daemon-reload
-systemctl enable zivpn.service
-systemctl start zivpn.service
+iptables -I INPUT -p udp --dport 5667 -j ACCEPT
+iptables -I INPUT -p udp --dport 1:65535 -j ACCEPT
+netfilter-persistent save > /dev/null
 
-# Firewall
-DEFAULT_IFACE=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
-if [ -n "$DEFAULT_IFACE" ]; then
-    iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
+systemctl daemon-reload
+systemctl enable udp-zivpn
+systemctl restart udp-zivpn
+
+# Nginx Configuration
+cat > /etc/nginx/conf.d/zivpn.conf <<EOF
+server {
+    listen 80;
+    listen [::]:80;
+    server_name ${domain};
+    return 301 https://\$host\$request_uri;
+}
+server {
+    listen 443 ssl http2;
+    server_name ${domain};
+    ssl_certificate /etc/zivpn/zivpn.crt;
+    ssl_certificate_key /etc/zivpn/zivpn.key;
+    root /var/www/html;
+    index index.html;
+    location / {
+        try_files \$uri \$uri/ =404;
+        add_header Content-Type text/plain;
+        return 200 "ZivCilz UDP Server Running";
+    }
+}
+EOF
+rm /etc/nginx/sites-enabled/default 2>/dev/null
+systemctl restart nginx
+
+# 7. AUTO DELETE & BACKUP
+cat > /usr/bin/xp-zivpn <<'EOF'
+#!/bin/bash
+CONFIG="/etc/zivpn/config.json"
+DB="/etc/zivpn/akun.db"
+[ ! -f "$DB" ] && exit 0
+NOW=$(date +%s)
+RESTART=0
+while read -r line; do
+    U=$(echo $line | cut -d: -f1)
+    E=$(echo $line | cut -d: -f2)
+    [[ ! "$E" =~ ^[0-9]+$ ]] && continue
+    if [ "$NOW" -ge "$E" ]; then
+        jq --arg u "$U" '.auth.config -= [$u]' "$CONFIG" > "${CONFIG}.tmp" && mv "${CONFIG}.tmp" "$CONFIG"
+        grep -v "^$U:" "$DB" > "${DB}.tmp" && mv "${DB}.tmp" "$DB"
+        RESTART=1
+    fi
+done < "$DB"
+[ "$RESTART" -eq 1 ] && systemctl restart udp-zivpn
+EOF
+chmod +x /usr/bin/xp-zivpn
+
+# 8. MENU INSTALLATION (PERMANENT)
+echo -e "${blue}[INFO] Installing Permanent Menu...${nc}"
+cd /root
+rm -rf /root/ZivCilz
+git clone https://github.com/Pujianto1219/ZivCilz.git
+cd /root/ZivCilz
+
+if [ -f "menu.sh" ]; then
+    # Menyalin file menu ke /usr/bin/menu agar jadi command global
+    cp menu.sh /usr/bin/menu
+    chmod +x /usr/bin/menu
+    echo -e "${green}Menu Installed Permanently!${nc}"
+else
+    echo -e "${red}File menu.sh tidak ditemukan di Repo!${nc}"
 fi
 
-# --------------------------------------------------------
-# DOWNLOAD MENU (Bagian Baru)
-# Pastikan ganti URL di bawah ini dengan link raw 'menu.sh' Anda!
-# --------------------------------------------------------
-echo -e "${YELLOW}[+] Installing Menu...${NC}"
-wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
-chmod +x /usr/bin/menu
+# Cleanup
+cd /root
+rm -rf /root/ZivCilz
 
-# Clean up
-rm zi.* 2>/dev/null
-rm -- "$0" 2>/dev/null
+# Cronjob
+sed -i "/xp-zivpn/d" /etc/crontab
+echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
+service cron restart
 
-echo -e "${CYAN}=========================================${NC}"
-echo -e "      INSTALASI SELESAI (OPTIMIZED)      "
-echo -e "${CYAN}=========================================${NC}"
-echo -e " Domain    : $domain_input"
-echo -e " Password  : $input_config"
-echo -e " Port      : 5667 (UDP)"
-echo -e " Command   : Ketik 'menu' untuk akses panel"
-echo -e "${CYAN}=========================================${NC}"
+# 9. FINISH & AUTO-START MENU
+echo -e "${green}Instalasi Selesai! Mengarahkan ke Menu...${nc}"
+sleep 2
+clear
+menu # Menjalankan perintah menu secara langsung
