@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn Central Bot Manager
+# Zivpn Central Bot Manager (Full Features)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 BOT_FILE="/etc/zivpn/bot_data"
@@ -42,21 +42,24 @@ case $1 in
         # Menu Setup Interaktif
         clear
         echo "=== TELEGRAM BOT SETUP ==="
+        echo "Panduan: Buat bot di @BotFather -> Dapat Token"
+        echo "         Chat ke bot -> Cek ID di @userinfobot -> Dapat ID"
+        echo ""
         read -p "Masukkan Bot Token : " token
         read -p "Masukkan Chat ID   : " chatid
         if [[ -n "$token" && -n "$chatid" ]]; then
             echo "${token}:${chatid}" > $BOT_FILE
             echo "Data tersimpan!"
-            # Test
+            # Test langsung
             bash "$0" test
         else
-            echo "Data tidak valid."
+            echo "Data tidak valid/kosong."
         fi
         ;;
         
     test)
-        send_msg "✅ *ZIVPN BOT TEST*%0A%0AHalo, Bot berhasil terhubung ke VPS: \`$DOMAIN\`"
-        echo "Pesan test dikirim."
+        send_msg "✅ *ZIVPN BOT TEST*%0A%0AHalo, Bot berhasil terhubung ke VPS: \`$DOMAIN\`%0A%0A_Notification System Ready_"
+        echo "Pesan test dikirim ke Telegram."
         ;;
         
     create)
@@ -96,20 +99,8 @@ case $1 in
         send_doc "$FILE" "$CAPTION"
         ;;
 
-    limit)
-        # Usage: zivbot limit <user> <ip_count>
-        USER=$2
-        COUNT=$3
-        MSG="🚫 *USER LIMIT REACHED*%0A%0A👤 User: \`$USER\`%0A🔢 Login: \`$COUNT\` IP%0A❌ Tindakan: Multi-Login Kill%0A%0A_Security System_"
-        send_msg "$MSG"
-        ;;
-        
     *)
-        # Jika dijalankan tanpa argumen, masuk ke mode setup
-        if [ -z "$1" ]; then
-            bash "$0" setup
-        else
-            echo "Command tidak dikenal."
-        fi
+        # Default behavior if just 'zivbot' is typed
+        bash "$0" setup
         ;;
 esac
