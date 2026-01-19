@@ -1,19 +1,19 @@
 #!/bin/bash
-# Zivpn Management Menu (Premium 2-Column Layout)
+# Zivpn Management Menu (Premium Boxed Layout)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # 1. SET TIMEZONE
 timedatectl set-timezone Asia/Jakarta
 
 # Warna & Format
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-YELLOW='\033[1;33m'
-WHITE='\033[1;37m'
-PURPLE='\033[0;35m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+RED='\e[1;31m'
+GREEN='\e[1;32m'
+YELLOW='\e[1;33m'
+BLUE='\e[1;34m'
+PURPLE='\e[1;35m'
+CYAN='\e[1;36m'
+WHITE='\e[1;37m'
+NC='\e[0m'
 
 # Konfigurasi
 CONFIG_FILE="/etc/zivpn/config.json"
@@ -31,51 +31,79 @@ fi
 touch $DB_FILE
 mkdir -p /etc/zivpn
 
-# Fungsi Banner
+# Fungsi Status Service
+get_status() {
+    if systemctl is-active --quiet zivpn; then STATUS_UDP="${GREEN}ON ${NC}"; else STATUS_UDP="${RED}OFF${NC}"; fi
+    if systemctl is-active --quiet nginx; then STATUS_NGINX="${GREEN}ON ${NC}"; else STATUS_NGINX="${RED}OFF${NC}"; fi
+    if systemctl is-active --quiet cron; then STATUS_CRON="${GREEN}ON ${NC}"; else STATUS_CRON="${RED}OFF${NC}"; fi
+}
+
+# Fungsi Header Banner
 header() {
     clear
-    echo -e "${CYAN}"
-    echo -e "███████╗██╗██╗   ██╗ ██████╗██╗██╗     ███████╗"
-    echo -e "╚══███╔╝██║██║   ██║██╔════╝██║██║     ╚══███╔╝"
-    echo -e "  ███╔╝ ██║██║   ██║██║     ██║██║       ███╔╝ "
-    echo -e " ███╔╝  ██║╚██╗ ██╔╝██║     ██║██║      ███╔╝  "
-    echo -e "███████╗██║ ╚████╔╝ ╚██████╗██║███████╗███████╗"
-    echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
-    echo -e "${NC}"
+    get_status
     
     # System Info
     RAM_USED=$(free -m | grep Mem | awk '{print $3}')
     RAM_TOTAL=$(free -m | grep Mem | awk '{print $2}')
     MYIP=$(wget -qO- ipinfo.io/ip)
     DOMAIN=$(cat $DOMAIN_FILE 2>/dev/null || echo "Belum diset")
-    DATE=$(date +"%d-%b-%Y | %H:%M WIB")
+    DATE=$(date +"%d %b %Y")
+    TIME=$(date +"%H:%M:%S WIB")
+    ISP=$(wget -qO- ipinfo.io/org | cut -d " " -f 2-10)
+    
+    # Layout Garis
+    # Lebar total sekitar 50-55 karakter
+    BOX_TOP="${BLUE}┌──────────────────────────────────────────────────────┐${NC}"
+    BOX_MID="${BLUE}├──────────────────────────────────────────────────────┤${NC}"
+    BOX_BOT="${BLUE}└──────────────────────────────────────────────────────┘${NC}"
+    LINE="${BLUE}│${NC}"
 
-    echo -e "${YELLOW}======================================================${NC}"
-    echo -e " ${WHITE}OS${NC}   : Ubuntu 20.04/22.04 LTS   ${WHITE}IP${NC}     : $MYIP"
-    echo -e " ${WHITE}RAM${NC}  : $RAM_USED / $RAM_TOTAL MB           ${WHITE}Domain${NC} : $DOMAIN"
-    echo -e " ${WHITE}Time${NC} : $DATE       ${WHITE}Status${NC} : $(systemctl is-active --quiet zivpn && echo -e "${GREEN}ON${NC}" || echo -e "${RED}OFF${NC}")"
-    echo -e "${YELLOW}======================================================${NC}"
+    echo -e "$BOX_TOP"
+    echo -e "$LINE ${WHITE}          • ZIVCILZ AUTOSCRIPT PREMIUM •             ${BLUE}│${NC}"
+    echo -e "$BOX_MID"
+    echo -e "$LINE  ${CYAN}DATE    :${NC} ${WHITE}$DATE $TIME${NC}"
+    # Menggunakan printf agar rapi rata kanan (Alignment)
+    printf "$LINE  ${CYAN}%-8s:${NC} ${WHITE}%-37s${BLUE}│${NC}\n" "OS" "$(cat /etc/os-release | grep -w PRETTY_NAME | cut -d= -f2 | tr -d '"')"
+    printf "$LINE  ${CYAN}%-8s:${NC} ${WHITE}%-37s${BLUE}│${NC}\n" "RAM" "$RAM_USED / $RAM_TOTAL MB"
+    printf "$LINE  ${CYAN}%-8s:${NC} ${WHITE}%-37s${BLUE}│${NC}\n" "ISP" "$ISP"
+    printf "$LINE  ${CYAN}%-8s:${NC} ${WHITE}%-37s${BLUE}│${NC}\n" "IP VPS" "$MYIP"
+    printf "$LINE  ${CYAN}%-8s:${NC} ${WHITE}%-37s${BLUE}│${NC}\n" "DOMAIN" "$DOMAIN"
+    echo -e "$BOX_BOT"
+    echo -e ""
+    
+    # Status Bar Kecil
+    echo -e "${BLUE}┌──────────────────────────────────────────────────────┐${NC}"
+    echo -e "$LINE  ZIVPN: $STATUS_UDP    NGINX: $STATUS_NGINX    CRON: $STATUS_CRON          ${BLUE}│${NC}"
+    echo -e "${BLUE}└──────────────────────────────────────────────────────┘${NC}"
+    echo -e ""
 }
 
 # Main Loop
 while true; do
     header
-    # Menu 2 Kolom
-    echo -e "${CYAN}[ USER MANAGEMENT ]${NC}                  ${CYAN}[ SYSTEM MENU ]${NC}"
-    echo -e "${GREEN}[01]${NC} Create User                     ${GREEN}[06]${NC} Change Domain"
-    echo -e "${GREEN}[02]${NC} Create Trial                    ${GREEN}[07]${NC} Setup Bot Notif"
-    echo -e "${GREEN}[03]${NC} Delete User                     ${GREEN}[08]${NC} Force Delete Exp"
-    echo -e "${GREEN}[04]${NC} Renew User                      ${GREEN}[09]${NC} Backup Data"
-    echo -e "${GREEN}[05]${NC} User List                       ${GREEN}[10]${NC} Restore Backup"
-    echo -e "                                      ${GREEN}[11]${NC} Restart Service"
-    echo -e ""
-    echo -e "                    ${RED}[x] Exit Menu${NC}"
-    echo -e "${YELLOW}======================================================${NC}"
+    
+    # MENU BOX
+    echo -e "${BLUE}┌──────────────────────${CYAN}[ MENU ]${BLUE}────────────────────────┐${NC}"
+    echo -e "${BLUE}│${NC}  ${CYAN}[ USER PANEL ]${NC}              ${CYAN}[ SYSTEM PANEL ]${NC}         ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}                                                      ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${GREEN}[01]${NC} Create User           ${GREEN}[06]${NC} Change Domain       ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${GREEN}[02]${NC} Create Trial          ${GREEN}[07]${NC} Setup Bot Notif     ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${GREEN}[03]${NC} Delete User           ${GREEN}[08]${NC} Force Delete Exp    ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${GREEN}[04]${NC} Renew User            ${GREEN}[09]${NC} Backup Data         ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}  ${GREEN}[05]${NC} User List             ${GREEN}[10]${NC} Restore Backup      ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}                            ${GREEN}[11]${NC} Restart Service     ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}                                                      ${BLUE}│${NC}"
+    echo -e "${BLUE}└──────────────────────────────────────────────────────┘${NC}"
+    echo -e "${BLUE}┌──────────────────────────────────────────────────────┐${NC}"
+    echo -e "${BLUE}│${NC}                 ${RED}[x] Exit / Keluar${NC}                    ${BLUE}│${NC}"
+    echo -e "${BLUE}└──────────────────────────────────────────────────────┘${NC}"
     echo -e ""
     read -p " Select Option : " opt
 
     case $opt in
         1|01) 
+            echo -e ""
             echo -e "${CYAN}--- CREATE REGULAR USER ---${NC}"
             read -p "Username : " new_pass
             if [ -z "$new_pass" ]; then echo -e "${RED}Empty!${NC}"; sleep 1; continue; fi
@@ -96,6 +124,7 @@ while true; do
             ;;
 
         2|02)
+            echo -e ""
             echo -e "${CYAN}--- CREATE TRIAL USER ---${NC}"
             read -p "Username : " trial_user
             if [ -z "$trial_user" ]; then echo -e "${RED}Empty!${NC}"; sleep 1; continue; fi
@@ -114,6 +143,7 @@ while true; do
             ;;
 
         3|03)
+            echo -e ""
             echo -e "${CYAN}--- DELETE USER ---${NC}"
             read -p "Username : " del_pass
             if jq -e --arg pass "$del_pass" '.auth.config | index($pass)' $CONFIG_FILE > /dev/null; then
@@ -129,6 +159,7 @@ while true; do
             ;;
 
         4|04)
+            echo -e ""
             echo -e "${CYAN}--- RENEW USER ---${NC}"
             read -p "Username : " renew_pass
             if grep -q "^${renew_pass}:" $DB_FILE; then
@@ -148,23 +179,26 @@ while true; do
             ;;
 
         5|05)
+            echo -e ""
             echo -e "${CYAN}--- USER LIST ---${NC}"
-            echo -e "User             | Expired"
-            echo -e "---------------------------------"
+            echo -e "${BLUE}┌──────────────────┬─────────────────────────┐${NC}"
+            echo -e "${BLUE}│${NC} USER             ${BLUE}│${NC} EXPIRED                 ${BLUE}│${NC}"
+            echo -e "${BLUE}├──────────────────┼─────────────────────────┤${NC}"
             for user in $(jq -r '.auth.config[]' $CONFIG_FILE); do
                 exp_ts=$(grep "^${user}:" $DB_FILE | cut -d: -f2)
                 if [[ -n "$exp_ts" && "$exp_ts" =~ ^[0-9]+$ ]]; then
                     if [ "$exp_ts" -gt "$(date +%s)" ]; then
                          diff=$(($exp_ts - $(date +%s)))
-                         if [ $diff -lt 86400 ]; then exp_str=$(date -d "@$exp_ts" +"%H:%M"); else exp_str=$(date -d "@$exp_ts" +"%Y-%m-%d"); fi
+                         if [ $diff -lt 86400 ]; then exp_str=$(date -d "@$exp_ts" +"%H:%M (%d-%b)"); else exp_str=$(date -d "@$exp_ts" +"%Y-%m-%d"); fi
                     else exp_str="${RED}EXPIRED${NC}"; fi
                 else exp_str="Unlimited"; fi
-                printf "%-16s | %s\n" "$user" "$exp_str"
+                printf "${BLUE}│${NC} %-16s ${BLUE}│${NC} %-23s ${BLUE}│${NC}\n" "$user" "$exp_str"
             done
-            echo -e "---------------------------------"
+            echo -e "${BLUE}└──────────────────┴─────────────────────────┘${NC}"
             ;;
 
         6|06)
+            echo -e ""
             echo -e "${CYAN}--- CHANGE DOMAIN ---${NC}"
             read -p "New Domain : " new_domain
             if [ -n "$new_domain" ]; then
@@ -176,15 +210,18 @@ while true; do
             ;;
 
         7|07)
+            echo -e ""
             if [ -f "/usr/bin/zivbot" ]; then zivbot setup; else echo -e "${RED}Bot Script Missing!${NC}"; fi
             ;;
 
         8|08)
+            echo -e ""
             echo -e "${YELLOW}Checking Expired Users...${NC}"
             if [ -f "/usr/bin/xp-zivpn" ]; then /usr/bin/xp-zivpn; echo -e "${GREEN}Done.${NC}"; fi
             ;;
 
         9|09)
+            echo -e ""
             echo -e "${CYAN}--- BACKUP DATA ---${NC}"
             echo -e "${YELLOW}Processing...${NC}"
             if [ -f "/usr/bin/backup-zivpn" ]; then 
@@ -195,6 +232,7 @@ while true; do
             ;;
 
         10)
+            echo -e ""
             echo -e "${CYAN}--- RESTORE BACKUP ---${NC}"
             echo -e "${YELLOW}Pastikan link berbentuk DIRECT LINK (Raw/Zip) dari Telegram/Cloud.${NC}"
             read -p "Link ZIP : " link_zip
