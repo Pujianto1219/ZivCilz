@@ -18,7 +18,12 @@ wget -O zi.sh https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/zi.sh;
 ```
 bash <(curl -fsSL https://raw.githubusercontent.com/zahidbd2/udp-zivpn/main/zi2.sh)
 ```
-
+### update menu
+```
+wget -q "https://raw.githubusercontent.com/Pujianto1219/ZivCilz/main/menu.sh" -O /usr/bin/menu
+chmod +x /usr/bin/menu
+menu
+```
 
 ### Uninstall
 
