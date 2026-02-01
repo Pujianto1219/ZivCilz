@@ -234,10 +234,41 @@ while true; do
             echo -e ""
             echo -e " ${YELLOW}➤ RENEW USER${NC}"
             read -p " Username : " renew_pass
+            
+            # Cek User di Database
+            if grep -q "^${renew_pass}:" $DB_FILE; then
+                read -p " Add Days : " add_days
+                
+                # Hitung Tanggal Baru
+                current_exp=$(grep "^${renew_pass}:" $DB_FILE | cut -d: -f2)
+                now=$(date +%s)
+                
+                # Jika sudah expired, hitung mulai dari sekarang
+                if [ "$current_exp" -lt "$now" ]; then
+                    current_exp=$now
+                fi
+                
+                new_exp=$(date -d "@$current_exp + $add_days days" +%s)
+                new_date=$(date -d "@$new_exp" +"%Y-%m-%d")
+                
+                # Update Database
+                grep -v "^${renew_pass}:" $DB_FILE > /tmp/db_tmp
+                echo "${renew_pass}:${new_exp}" >> /tmp/db_tmp; mv /tmp/db_tmp $DB_FILE
+                
+                # Update Config JSON (Jika user sempat terhapus otomatis)
                 if ! grep -q "\"$renew_pass\"" $CONFIG_FILE; then
                      echo -e "${YELLOW}User expired & removed. Reactivating...${NC}"
                      jq --arg pass "$renew_pass" '.auth.config += [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
                 fi
+                
+                systemctl restart $SERVICE_NAME
+                
+                # Kirim Notif
+                if [ -f "/usr/bin/zivbot" ]; then zivbot renew "$renew_pass" "$new_date" & fi
+                show_receipt "$renew_pass" "$renew_pass" "$new_date (Renewed)"
+            else
+                echo -e "${RED}User not found in Database!${NC}"
+            fi
             ;;
 
         4|04)
