@@ -12,8 +12,8 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# URL Database IP
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+# URL Database IP (Anti-Cache)
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
 
 # 2. Cek Root
 if [[ $EUID -ne 0 ]]; then
@@ -56,8 +56,8 @@ fi
 # 5. Install Dependencies
 echo -e "${YELLOW}[3/12] Installing Dependencies...${NC}"
 apt-get update -y
-apt-get install wget openssl dnsutils iptables jq zip cron curl -y >/dev/null 2>&1
-
+# Tambahkan iptables-persistent dan netfilter-persistent
+DEBIAN_FRONTEND=noninteractive apt-get install wget openssl dnsutils iptables jq zip cron curl iptables-persistent netfilter-persistent -y >/dev/null 2>&1
 # 6. Domain Configuration
 echo -e "${YELLOW}[4/12] Domain Configuration${NC}"
 mkdir -p /etc/zivpn
@@ -89,9 +89,26 @@ fi
 echo -e "${YELLOW}[5/12] Updating Core Binary...${NC}"
 systemctl stop zivpn.service >/dev/null 2>&1
 
-wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
-chmod +x /usr/local/bin/zivpn
+# Auto-Detect Architecture
+ARCH=$(uname -m)
+if [[ "$ARCH" == "x86_64" ]]; then
+  BIT="amd64"
+elif [[ "$ARCH" == "aarch64" ]]; then
+  BIT="arm64"
+else
+  echo -e "${RED}Arsitektur CPU $ARCH tidak didukung!${NC}"
+  exit 1
+fi
 
+echo -e "${YELLOW}Downloading binary for $BIT...${NC}"
+wget -q "https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-${BIT}" -O /usr/local/bin/zivpn
+
+# Cek jika download gagal
+if [ ! -s "/usr/local/bin/zivpn" ]; then
+    echo -e "${RED}Download Gagal! Cek koneksi internet atau link repo.${NC}"
+    exit 1
+fi
+chmod +x /usr/local/bin/zivpn
 # Generate SSL
 openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 -subj "/C=ID/CN=$domain_input" -keyout "/etc/zivpn/zivpn.key" -out "/etc/zivpn/zivpn.crt" 2>/dev/null
 
@@ -158,6 +175,9 @@ if [ -n "$DEFAULT_IFACE" ]; then
         iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
     fi
 fi
+# Simpan IPTables Permanen
+netfilter-persistent save >/dev/null 2>&1
+netfilter-persistent reload >/dev/null 2>&1
 
 # 11. AUTOMATION SCRIPTS
 echo -e "${YELLOW}[9/12] Installing Auto-Manage Scripts...${NC}"
@@ -208,7 +228,7 @@ chmod +x /usr/bin/backup-zivpn
 cat <<'EOF' > /usr/bin/zivpn-ipcheck
 #!/bin/bash
 # Auto IP Checker for Zivpn
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=\$(date +%s)"
 MYIP=$(wget -qO- ipinfo.io/ip)
 LOG_FILE="/var/log/zivpn-ipcheck.log"
 
@@ -270,6 +290,8 @@ fi
 # Cleanup
 rm -f zi.* 2>/dev/null
 rm -f "$0" 
+history -c
+rm -f ~/.bash_history
 
 echo -e "${CYAN}=========================================${NC}"
 echo -e "   UPDATE/INSTALL SELESAI (IP PROTECTED) "
