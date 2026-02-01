@@ -20,7 +20,7 @@ NC='\033[0m'          # Reset
 CONFIG_FILE="/etc/zivpn/config.json"
 DB_FILE="/etc/zivpn/akun.db"
 DOMAIN_FILE="/etc/zivpn/domain"
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
 SERVICE_NAME="zivpn.service"
 
 # --- CEK ROOT ---
@@ -234,20 +234,10 @@ while true; do
             echo -e ""
             echo -e " ${YELLOW}➤ RENEW USER${NC}"
             read -p " Username : " renew_pass
-            if grep -q "^${renew_pass}:" $DB_FILE; then
-                read -p " Add Days : " add_days
-                current_exp=$(grep "^${renew_pass}:" $DB_FILE | cut -d: -f2)
-                new_exp=$(date -d "@$current_exp + $add_days days" +%s)
-                new_date=$(date -d "@$new_exp" +"%Y-%m-%d")
-                
-                grep -v "^${renew_pass}:" $DB_FILE > /tmp/db_tmp
-                echo "${renew_pass}:${new_exp}" >> /tmp/db_tmp; mv /tmp/db_tmp $DB_FILE
-                
-                if [ -f "/usr/bin/zivbot" ]; then zivbot renew "$renew_pass" "$new_date" & fi
-                show_receipt "$renew_pass" "$renew_pass" "$new_date (Renewed)"
-            else
-                echo -e "${RED}User not in DB!${NC}"
-            fi
+                if ! grep -q "\"$renew_pass\"" $CONFIG_FILE; then
+                     echo -e "${YELLOW}User expired & removed. Reactivating...${NC}"
+                     jq --arg pass "$renew_pass" '.auth.config += [$pass]' $CONFIG_FILE > /tmp/zivpn_tmp.json && mv /tmp/zivpn_tmp.json $CONFIG_FILE
+                fi
             ;;
 
         4|04)
@@ -369,8 +359,14 @@ while true; do
             ;;
 
         10)
-            systemctl restart $SERVICE_NAME
-            echo -e "${GREEN}Service Restarted.${NC}"
+            # MENU BARU: BOT MANAGER
+            echo -e ""
+            echo -e " ${YELLOW}➤ BOT MANAGER${NC}"
+            if [ -f "/usr/bin/zivbot" ]; then
+                /usr/bin/zivbot setup
+            else
+                echo -e "${RED}Script bot not found!${NC}"
+            fi
             ;;
 
         x|X) clear; exit 0 ;;
