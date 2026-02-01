@@ -228,7 +228,7 @@ chmod +x /usr/bin/backup-zivpn
 cat <<'EOF' > /usr/bin/zivpn-ipcheck
 #!/bin/bash
 # Auto IP Checker for Zivpn
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=\$(date +%s)"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
 MYIP=$(wget -qO- ipinfo.io/ip)
 LOG_FILE="/var/log/zivpn-ipcheck.log"
 
