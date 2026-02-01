@@ -358,35 +358,77 @@ while true; do
 
         8|08)
             echo -e ""
-            echo -e "${YELLOW}Creating Backup...${NC}"
+            echo -e "${YELLOW}➤ BACKUP DATA${NC}"
+            echo -e " Memproses backup database & config..."
             if [ -f "/usr/bin/backup-zivpn" ]; then 
                 /usr/bin/backup-zivpn
-                echo -e "${GREEN}Backup sent to Telegram!${NC}"
+            else
+                echo -e "${RED}Script backup tidak ditemukan!${NC}"
             fi
             ;;
 
         9|09)
             echo -e ""
             echo -e " ${YELLOW}➤ RESTORE BACKUP${NC}"
-            echo -e " ${WHITE}Paste Direct Link (ZIP format)${NC}"
+            echo -e " ${WHITE}Paste Link Transfer.sh (Direct Link)${NC}"
             read -p " Link : " link_zip
-            if [ -z "$link_zip" ]; then echo -e "${RED}Aborted.${NC}"; continue; fi
-            mkdir -p /root/restore && cd /root/restore
-            wget -q "$link_zip" -O backup.zip
-            if [ -f "backup.zip" ]; then
-                unzip -o backup.zip > /dev/null 2>&1
-                if [ -d "backup" ]; then
-                    cp backup/config.json /etc/zivpn/
-                    cp backup/akun.db /etc/zivpn/
-                    systemctl restart $SERVICE_NAME
-                    echo -e "${GREEN}Restore Success!${NC}"
-                else
-                    echo -e "${RED}Invalid Backup ZIP.${NC}"
-                fi
-            else
-                echo -e "${RED}Download Failed.${NC}"
+
+            # Validasi Input Kosong
+            if [ -z "$link_zip" ]; then 
+                echo -e "${RED}Link tidak boleh kosong!${NC}"
+                sleep 1
+                continue
             fi
+
+            # Buat folder sementara
+            echo -e " ${YELLOW}Downloading Backup...${NC}"
+            rm -rf /root/restore # Bersihkan sisa restore lama jika ada
+            mkdir -p /root/restore
+            cd /root/restore
+
+            # Download File
+            wget -q "$link_zip" -O backup.zip
+            
+            # Cek apakah file terdownload dengan benar (Size > 0)
+            if [ ! -s "backup.zip" ]; then
+                echo -e "${RED}Download Gagal! Cek Link atau Koneksi.${NC}"
+                cd /root
+                rm -rf /root/restore
+                continue
+            fi
+
+            # Extract File
+            echo -e " ${YELLOW}Extracting Data...${NC}"
+            unzip -o backup.zip > /dev/null 2>&1
+
+            # LOGIKA RESTORE (Cek Struktur Zip)
+            # Kondisi 1: Jika hasil zip ada di dalam folder "backup" (Sesuai script backup kita)
+            if [ -f "backup/config.json" ] && [ -f "backup/akun.db" ]; then
+                cp backup/config.json /etc/zivpn/
+                cp backup/akun.db /etc/zivpn/
+                STATUS="OK"
+            
+            # Kondisi 2: Jika user buat zip manual (file langsung di luar tanpa folder)
+            elif [ -f "config.json" ] && [ -f "akun.db" ]; then
+                cp config.json /etc/zivpn/
+                cp akun.db /etc/zivpn/
+                STATUS="OK"
+            
+            else
+                STATUS="FAIL"
+            fi
+
+            # Finalisasi
+            cd /root
             rm -rf /root/restore
+
+            if [ "$STATUS" == "OK" ]; then
+                systemctl restart $SERVICE_NAME
+                echo -e "${GREEN}Restore Success! Database telah dipulihkan.${NC}"
+            else
+                echo -e "${RED}Gagal! File Backup Corrupt atau Tidak Lengkap.${NC}"
+                echo -e "Pastikan file zip berisi config.json & akun.db"
+            fi
             ;;
 
         10)
