@@ -1,5 +1,5 @@
 #!/bin/bash
-# Zivpn UDP Installer - Final (Auto-Check IP Cron)
+# Zivpn UDP Installer - Final (Anti-Cache & Auto-Check IP)
 # Repo: https://github.com/Pujianto1219/ZivCilz
 
 # 1. SET TIMEZONE
@@ -12,8 +12,9 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# URL Database IP
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)""
+# URL Database IP (Link Base)
+# Kita tidak pasang ?v= di sini agar bisa dimodifikasi dinamis di bawah
+REPO_IP="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
 
 # 2. Cek Root
 if [[ $EUID -ne 0 ]]; then
@@ -23,20 +24,24 @@ fi
 
 clear
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   ZIVPN UDP INSTALLER (AUTO IP CHECK)   "
+echo -e "    ZIVPN UDP INSTALLER (ANTI-CACHE MODE)    "
 echo -e "${CYAN}=========================================${NC}"
 
-# 3. IP Validation (Install Gatekeeper)
+# 3. IP Validation (Updated with Anti-Cache Headers)
 echo -e "${YELLOW}[1/12] Validating IP Address...${NC}"
-MYIP=$(wget -qO- ipinfo.io/ip || curl -s ifconfig.me)
+MYIP=$(curl -s ifconfig.me || wget -qO- ipinfo.io/ip)
 echo -e "Your IP: ${GREEN}$MYIP${NC}"
 
-if wget -qO- "$PERMISSION_URL" | grep -qw "$MYIP"; then
+# LOGIC BARU: Menggunakan Curl dengan Header No-Cache
+# Teknik: Menambahkan ?v=waktu&r=acak agar GitHub dipaksa ambil file baru
+CHECK_IP=$(curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" "${REPO_IP}?v=$(date +%s)&r=$RANDOM" | grep -w "$MYIP")
+
+if [[ -n "$CHECK_IP" ]]; then
     echo -e "${GREEN}[SUCCESS] IP Verified!${NC}"
     sleep 1
 else
     echo -e "${RED}[ERROR] IP $MYIP is not registered!${NC}"
-    rm -f "$0"
+    # rm -f "$0"
     exit 1
 fi
 
@@ -56,7 +61,7 @@ fi
 # 5. Install Dependencies
 echo -e "${YELLOW}[3/12] Installing Dependencies...${NC}"
 apt-get update -y
-apt-get install wget openssl dnsutils iptables jq zip cron curl -y >/dev/null 2>&1
+apt-get install wget openssl dnsutils iptables jq zip cron curl net-tools -y >/dev/null 2>&1
 
 # 6. Domain Configuration
 echo -e "${YELLOW}[4/12] Domain Configuration${NC}"
@@ -87,7 +92,7 @@ fi
 
 # 7. Setup Binary
 echo -e "${YELLOW}[5/12] Updating Core Binary...${NC}"
-systemctl stop zivpn.service >/dev/null 2>&1
+systemctl stop zivpn.service >/dev/null 2>&1 || true
 
 wget -q https://github.com/Pujianto1219/ZivCilz/releases/download/Ziv-Panel2.0/udp-zivpn-linux-amd64 -O /usr/local/bin/zivpn
 chmod +x /usr/local/bin/zivpn
@@ -108,13 +113,13 @@ EOF
 sysctl -p >/dev/null 2>&1
 fi
 
-# 9. Config JSON
+# 9. Config JSON (IPv4 FIXED)
 echo -e "${YELLOW}[7/12] Checking Config...${NC}"
 if [ ! -f "/etc/zivpn/config.json" ]; then
     RANDOM_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 8)
 cat <<EOF > /etc/zivpn/config.json
 {
-  "listen": ":5667",
+  "listen": "0.0.0.0:5667",
   "cert": "/etc/zivpn/zivpn.crt",
   "key": "/etc/zivpn/zivpn.key",
   "obfs": "zivpn",
@@ -132,7 +137,7 @@ echo -e "${YELLOW}[8/12] Finalizing Service...${NC}"
 cat <<EOF > /etc/systemd/system/zivpn.service
 [Unit]
 Description=zivpn VPN Server
-After=network.target
+After=network-online.target
 
 [Service]
 Type=simple
@@ -154,15 +159,14 @@ systemctl start zivpn.service
 
 DEFAULT_IFACE=$(ip -4 route ls | grep default | grep -Po '(?<=dev )(\S+)' | head -1)
 if [ -n "$DEFAULT_IFACE" ]; then
-    if ! iptables -t nat -C PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667 2>/dev/null; then
-        iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
-    fi
+    iptables -t nat -D PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667 2>/dev/null
+    iptables -t nat -A PREROUTING -i $DEFAULT_IFACE -p udp --dport 6000:19999 -j DNAT --to-destination :5667
 fi
 
 # 11. AUTOMATION SCRIPTS
 echo -e "${YELLOW}[9/12] Installing Auto-Manage Scripts...${NC}"
 
-# A. Script XP (User Expired)
+# A. Script XP
 cat <<'EOF' > /usr/bin/xp-zivpn
 #!/bin/bash
 CONFIG="/etc/zivpn/config.json"
@@ -191,36 +195,37 @@ cat <<'EOF' > /usr/bin/backup-zivpn
 DATE=$(date +"%Y-%m-%d-%H-%M")
 DOMAIN=$(cat /etc/zivpn/domain 2>/dev/null || echo "vps")
 BACKUP_DIR="/root/backup"
-ZIP_FILE="${BACKUP_DIR}/backup-${DOMAIN}-${DATE}.zip"
 mkdir -p $BACKUP_DIR
 cp /etc/zivpn/config.json $BACKUP_DIR/
 cp /etc/zivpn/akun.db $BACKUP_DIR/
-cd /root/
-zip -r $ZIP_FILE backup > /dev/null 2>&1
-if [ -f "/usr/bin/zivbot" ]; then /usr/bin/zivbot backup "$ZIP_FILE"; fi
+ZIP_FILE="${BACKUP_DIR}/backup-${DOMAIN}-${DATE}.zip"
+cd $BACKUP_DIR
+zip -r $ZIP_FILE . > /dev/null 2>&1
+mv $ZIP_FILE /root/
+if [ -f "/usr/bin/zivbot" ]; then /usr/bin/zivbot backup "/root/backup-${DOMAIN}-${DATE}.zip"; fi
 rm -rf $BACKUP_DIR
-rm -f $ZIP_FILE
+rm -f "/root/backup-${DOMAIN}-${DATE}.zip"
 EOF
 chmod +x /usr/bin/backup-zivpn
 
-# C. SCRIPT BARU: AUTO IP CHECKER
+# C. SCRIPT BARU: AUTO IP CHECKER (ANTI-DELAY VERSION)
 # ==========================================
 cat <<'EOF' > /usr/bin/zivpn-ipcheck
 #!/bin/bash
-# Auto IP Checker for Zivpn
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
-MYIP=$(wget -qO- ipinfo.io/ip)
+# Auto IP Checker for Zivpn (Anti-Cache)
+REPO_IP="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+MYIP=$(curl -s ifconfig.me)
 LOG_FILE="/var/log/zivpn-ipcheck.log"
 
-# Ambil Data
-RAW_DATA=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
+# FETCH DATA DENGAN NO-CACHE HEADERS + RANDOM PARAMETER
+# Ini memaksa GitHub memberikan file terbaru, melewati cache CDN
+RAW_DATA=$(curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" "${REPO_IP}?v=$(date +%s)&r=$RANDOM" | grep "$MYIP")
 TODAY=$(date +%Y-%m-%d)
 
 if [[ -n "$RAW_DATA" ]]; then
     EXP_DATE=$(echo "$RAW_DATA" | awk '{print $3}')
     if [[ "$EXP_DATE" > "$TODAY" || "$EXP_DATE" == "$TODAY" ]]; then
         # IP VALID
-        # Pastikan service jalan (Auto-Heal)
         if ! systemctl is-active --quiet zivpn.service; then
             systemctl start zivpn.service
             echo "$(date): Service Restarted (IP Valid)" >> $LOG_FILE
@@ -232,7 +237,7 @@ if [[ -n "$RAW_DATA" ]]; then
     fi
 else
     # IP TIDAK TERDAFTAR
-    echo "$(date): IP Not Registered. Stopping Service." >> $LOG_FILE
+    echo "$(date): IP Not Registered ($MYIP). Stopping Service." >> $LOG_FILE
     systemctl stop zivpn.service
 fi
 EOF
@@ -245,10 +250,10 @@ sed -i "/xp-zivpn/d" /etc/crontab
 sed -i "/backup-zivpn/d" /etc/crontab
 sed -i "/zivpn-ipcheck/d" /etc/crontab
 
-# 1. Cek User Expired (Per Menit - untuk Trial)
+# 1. Cek User Expired (Per Menit)
 echo "* * * * * root /usr/bin/xp-zivpn" >> /etc/crontab
-# 2. Cek Validitas IP VPS (Setiap jam 12 Malam)
-echo "0 0 * * * root /usr/bin/zivpn-ipcheck" >> /etc/crontab
+# 2. Cek Validitas IP VPS (Setiap 5 Menit agar lebih responsif)
+echo "*/5 * * * * root /usr/bin/zivpn-ipcheck" >> /etc/crontab
 # 3. Auto Backup (Jam 5 Pagi)
 echo "0 5 * * * root /usr/bin/backup-zivpn" >> /etc/crontab
 
@@ -272,10 +277,10 @@ rm -f zi.* 2>/dev/null
 rm -f "$0" 
 
 echo -e "${CYAN}=========================================${NC}"
-echo -e "   UPDATE/INSTALL SELESAI (IP PROTECTED) "
+echo -e "    UPDATE/INSTALL SELESAI (NO DELAY MODE) "
 echo -e "${CYAN}=========================================${NC}"
-echo -e " Domain     : $domain_input"
-echo -e " IP Check   : Active (Daily Cron)"
+echo -e " Domain      : $domain_input"
+echo -e " IP Check    : Active (Real-time No Cache)"
 echo -e "${CYAN}=========================================${NC}"
 sleep 2
 clear
