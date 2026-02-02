@@ -13,7 +13,7 @@ CYAN='\033[0;36m'
 NC='\033[0m'
 
 # URL Database IP
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)""
 
 # 2. Cek Root
 if [[ $EUID -ne 0 ]]; then
@@ -208,7 +208,7 @@ chmod +x /usr/bin/backup-zivpn
 cat <<'EOF' > /usr/bin/zivpn-ipcheck
 #!/bin/bash
 # Auto IP Checker for Zivpn
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
 MYIP=$(wget -qO- ipinfo.io/ip)
 LOG_FILE="/var/log/zivpn-ipcheck.log"
 
