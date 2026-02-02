@@ -20,7 +20,7 @@ NC='\033[0m'          # Reset
 CONFIG_FILE="/etc/zivpn/config.json"
 DB_FILE="/etc/zivpn/akun.db"
 DOMAIN_FILE="/etc/zivpn/domain"
-PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
+PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip?v=$(date +%s)"
 SERVICE_NAME="zivpn.service"
 
 # --- CEK ROOT ---
