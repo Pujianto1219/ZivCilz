@@ -6,7 +6,6 @@
 timedatectl set-timezone Asia/Jakarta
 
 # --- WARNA ULTRA BRIGHT (GLOWING) ---
-# Menggunakan kode '1;9x' untuk efek tebal dan terang
 RED='\033[1;91m'      # Merah Menyala
 GREEN='\033[1;92m'    # Hijau Menyala
 YELLOW='\033[1;93m'   # Kuning Emas
@@ -20,6 +19,7 @@ NC='\033[0m'          # Reset
 CONFIG_FILE="/etc/zivpn/config.json"
 DB_FILE="/etc/zivpn/akun.db"
 DOMAIN_FILE="/etc/zivpn/domain"
+# URL Tanpa Parameter (akan ditambah dinamis)
 PERMISSION_URL="https://raw.githubusercontent.com/Pujianto1219/ip/refs/heads/main/ip"
 SERVICE_NAME="zivpn.service"
 
@@ -33,11 +33,13 @@ touch $DB_FILE
 mkdir -p /etc/zivpn
 
 # =================================================================
-# 🛡️ GATEKEEPER SYSTEM (CEK IP SEBELUM MASUK MENU)
+# 🛡️ GATEKEEPER SYSTEM (ANTI-CACHE & FAST CHECK)
 # =================================================================
-MYIP=$(wget -qO- ipinfo.io/ip)
-# Mengambil data dari github
-RAW_DATA=$(curl -s "$PERMISSION_URL" | grep "$MYIP")
+MYIP=$(curl -s ifconfig.me || wget -qO- ipinfo.io/ip)
+
+# LOGIC BARU: Anti-Cache Request
+# Menambahkan header no-cache dan parameter random untuk bypass CDN GitHub
+RAW_DATA=$(curl -s -H "Cache-Control: no-cache" -H "Pragma: no-cache" "${PERMISSION_URL}?v=$(date +%s)&r=$RANDOM" | grep "$MYIP")
 
 # Logika Validasi
 VALID_IP=false
@@ -141,7 +143,7 @@ header() {
     echo -e "${CYAN}"
     echo -e "███████╗██╗██╗   ██╗ ██████╗██╗██╗     ███████╗"
     echo -e "╚══███╔╝██║██║   ██║██╔════╝██║██║     ╚══███╔╝"
-    echo -e "  ███╔╝ ██║██║   ██║██║     ██║██║       ███╔╝ "
+    echo -e "  ███╔╝ ██║██║   ██║██║     ██║██║      ███╔╝ "
     echo -e " ███╔╝  ██║╚██╗ ██╔╝██║     ██║██║      ███╔╝  "
     echo -e "███████╗██║ ╚████╔╝ ╚██████╗██║███████╗███████╗"
     echo -e "╚══════╝╚═╝  ╚═══╝   ╚═════╝╚═╝╚══════╝╚══════╝"
@@ -164,7 +166,7 @@ header() {
     if [[ "$S_UDP" == "ON " ]]; then COL_UDP=$GREEN; else COL_UDP=$RED; fi
     if [[ "$S_CRON" == "ON " ]]; then COL_CRON=$GREEN; else COL_CRON=$RED; fi
     
-    printf "$V      ${WHITE}%-10s${NC} ${COL_UDP}%-9s${NC} ${C_BORDER}│${NC}      ${WHITE}%-10s${NC} ${COL_CRON}%-9s${NC}     $V\n" "ZIVPN UDP:" "$S_UDP" "AUTO XP:" "$S_CRON"
+    printf "$V       ${WHITE}%-10s${NC} ${COL_UDP}%-9s${NC} ${C_BORDER}│${NC}       ${WHITE}%-10s${NC} ${COL_CRON}%-9s${NC}     $V\n" "ZIVPN UDP:" "$S_UDP" "AUTO XP:" "$S_CRON"
     echo -e "$BOT"
 }
 
@@ -183,7 +185,7 @@ while true; do
     
     # EXIT BOX
     echo -e "${BLUE}┌────────────────────────────────────────────────────┐${NC}"
-    echo -e "${BLUE}│${NC}               ${RED}[x] Exit / Keluar${NC}                    ${BLUE}│${NC}"
+    echo -e "${BLUE}│${NC}                ${RED}[x] Exit / Keluar${NC}                     ${BLUE}│${NC}"
     echo -e "${BLUE}└────────────────────────────────────────────────────┘${NC}"
     echo -e ""
     echo -e -n " Select Option : "
@@ -294,18 +296,18 @@ while true; do
             echo -e ""
             echo -e " ${YELLOW}➤ USER LIST${NC}"
             echo -e "${BLUE}┌─────────────────────┬──────────────────────────┐${NC}"
-            echo -e "${BLUE}│${NC} ${WHITE}USER${NC}                ${BLUE}│${NC} ${WHITE}EXPIRED${NC}                  ${BLUE}│${NC}"
+            echo -e "${BLUE}│${NC} ${WHITE}USER${NC}                 ${BLUE}│${NC} ${WHITE}EXPIRED${NC}                   ${BLUE}│${NC}"
             echo -e "${BLUE}├─────────────────────┼──────────────────────────┤${NC}"
             for user in $(jq -r '.auth.config[]' $CONFIG_FILE); do
                 exp_ts=$(grep "^${user}:" $DB_FILE | cut -d: -f2)
                 if [[ -n "$exp_ts" && "$exp_ts" =~ ^[0-9]+$ ]]; then
                     if [ "$exp_ts" -gt "$(date +%s)" ]; then
-                         diff=$(($exp_ts - $(date +%s)))
-                         if [ $diff -lt 86400 ]; then 
+                          diff=$(($exp_ts - $(date +%s)))
+                          if [ $diff -lt 86400 ]; then 
                             exp_str=$(date -d "@$exp_ts" +"%H:%M (%d-%b)")
-                         else 
+                          else 
                             exp_str=$(date -d "@$exp_ts" +"%Y-%m-%d")
-                         fi
+                          fi
                     else 
                         exp_str="${RED}EXPIRED${NC}"
                     fi
@@ -354,14 +356,16 @@ while true; do
             wget -q "$link_zip" -O backup.zip
             if [ -f "backup.zip" ]; then
                 unzip -o backup.zip > /dev/null 2>&1
+                # Handle jika zip berisi folder 'backup' atau langsung file
                 if [ -d "backup" ]; then
                     cp backup/config.json /etc/zivpn/
                     cp backup/akun.db /etc/zivpn/
-                    systemctl restart $SERVICE_NAME
-                    echo -e "${GREEN}Restore Success!${NC}"
                 else
-                    echo -e "${RED}Invalid Backup ZIP.${NC}"
+                    cp config.json /etc/zivpn/
+                    cp akun.db /etc/zivpn/
                 fi
+                systemctl restart $SERVICE_NAME
+                echo -e "${GREEN}Restore Success!${NC}"
             else
                 echo -e "${RED}Download Failed.${NC}"
             fi
